@@ -1,4 +1,4 @@
-CXXFLAGS= -O3 -fomit-frame-pointer
+CXXFLAGS= -O3 -fomit-frame-pointer -std=c++11
 override CXXFLAGS+= -Wall -fsigned-char
 
 LIBS=-lglut -lGL
