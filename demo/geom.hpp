@@ -4,6 +4,14 @@
 #include <algorithm>
 
 struct Vec4;
+struct Vec3;
+
+namespace {
+
+inline float dot(const Vec3& v1, const Vec3& v2);
+inline float dot(const Vec4& v1, const Vec4& v2);
+
+}
 
 struct Vec3
 {
@@ -43,14 +51,14 @@ struct Vec3
     Vec3 &operator*=(float k) { x *= k; y *= k; z *= k; return *this; }
     Vec3 &operator/=(float k) { x /= k; y /= k; z /= k; return *this; }
 
-    float dot(const Vec3 &o) const { return x*o.x + y*o.y + z*o.z; }
-    float magnitude() const { return sqrtf(dot(*this)); }
-    float squaredlen() const { return dot(*this); }
+//    float dot(const Vec3 &o) const { return x*o.x + y*o.y + z*o.z; }
+    float magnitude() const { return sqrtf(dot(*this, *this)); }
+    float squaredlen() const { return dot(*this, *this); }
     float dist(const Vec3 &o) const { return (*this - o).magnitude(); }
     Vec3 normalize() const { return *this * (1.0f / magnitude()); }
     Vec3 cross(const Vec3 &o) const { return Vec3(y*o.z-z*o.y, z*o.x-x*o.z, x*o.y-y*o.x); }
-    Vec3 reflect(const Vec3 &n) const { return *this - n*2.0f*dot(n); }
-    Vec3 project(const Vec3 &n) const { return *this - n*dot(n); }
+    Vec3 reflect(const Vec3 &n) const { return *this - n*2.0f*dot(*this, n); }
+    Vec3 project(const Vec3 &n) const { return *this - n*dot(*this, n); }
 };
 
 struct Vec4
@@ -89,15 +97,28 @@ struct Vec4
     Vec4 &operator*=(float k) { x *= k; y *= k; z *= k; w *= k; return *this; }
     Vec4 &operator/=(float k) { x /= k; y /= k; z /= k; w /= k; return *this; }
 
-    float dot(const Vec4 &o) const  { return x*o.x + y*o.y + z*o.z + w*o.w; }
-    float magnitude() const  { return sqrtf(dot(*this)); }
-    float magnitude3() const { return Vec3(*this).magnitude(); }
+//    float dot(const Vec4 &o) const  { return x*o.x + y*o.y + z*o.z + w*o.w; }
+    float magnitude() const  { return sqrtf(dot(*this, *this)); }
     Vec4 normalize() const { return *this * (1.0f / magnitude()); }
     Vec3 cross3(const Vec4 &o) const { return Vec3(y*o.z-z*o.y, z*o.x-x*o.z, x*o.y-y*o.x); }
     Vec3 cross3(const Vec3 &o) const { return Vec3(y*o.z-z*o.y, z*o.x-x*o.z, x*o.y-y*o.x); }
 };
 
+
+
 inline Vec3::Vec3(const Vec4 &v) : x(v.x), y(v.y), z(v.z) {}
+
+namespace {
+
+inline float dot(const Vec3& v1, const Vec3& v2) {
+  return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+}
+
+inline float dot(const Vec4& v1, const Vec4& v2) {
+  return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z + v1.w * v2.w;
+}
+
+}
 
 struct Matrix3x3;
 struct Matrix3x4;
@@ -246,7 +267,7 @@ struct Matrix3x3
     }
     void transpose() { transpose(Matrix3x3(*this)); }
 
-    Vec3 transform(const Vec3 &o) const { return Vec3(a.dot(o), b.dot(o), c.dot(o)); }
+    Vec3 transform(const Vec3 &o) const { return Vec3(dot(a,o), dot(b,o), dot(c,o)); }
     Vec3 transposedtransform(const Vec3 &o) const { return a*o.x + b*o.y + c*o.z; }
 };
 
@@ -294,9 +315,9 @@ struct Matrix3x4
         invrot.b /= invrot.b.squaredlen();
         invrot.c /= invrot.c.squaredlen();
         Vec3 trans(o.a.w, o.b.w, o.c.w);
-        a = Vec4(invrot.a, -invrot.a.dot(trans));
-        b = Vec4(invrot.b, -invrot.b.dot(trans));
-        c = Vec4(invrot.c, -invrot.c.dot(trans));
+        a = Vec4(invrot.a, -dot(invrot.a, trans));
+        b = Vec4(invrot.b, -dot(invrot.b, trans));
+        c = Vec4(invrot.c, -dot(invrot.c, trans));
     }
     void invert() { invert(Matrix3x4(*this)); }
 
@@ -311,17 +332,17 @@ struct Matrix3x4
 
     Vec3 transform(const Vec3 &o) const { 
       return Vec3(
-          a.dot(Vec4(o,1)),
-          b.dot(Vec4(o,1)),
-          c.dot(Vec4(o,1))
+          dot(a, Vec4(o,1)),
+          dot(b, Vec4(o,1)),
+          dot(c, Vec4(o,1))
       );
     }
 
     Vec3 transformnormal(const Vec3 &o) const { 
       return Vec3(
-          a.dot(Vec4(o,0)),
-          b.dot(Vec4(o,0)),
-          c.dot(Vec4(o,0))
+          dot(a, Vec4(o,0)),
+          dot(b, Vec4(o,0)),
+          dot(c, Vec4(o,0))
       );
     }
 };
