@@ -118,9 +118,8 @@ struct Quat
     }
     explicit Quat(const Vec3 &v) : x(v.x), y(v.y), z(v.z), 
             w(-sqrtf(std::max(1.0f - length2(v), 0.0f))) {}
-    explicit Quat(const float *v) : x(v[0]), y(v[1]), z(v[2]), w(v[3]) {}
+    //explicit Quat(const float *v) : x(v[0]), y(v[1]), z(v[2]), w(v[3]) {}
     explicit Quat(const Matrix3x3 &m) { convertmatrix(m); }
-    explicit Quat(const Matrix3x4 &m) { convertmatrix(m); }
 
     void restorew()
     {
@@ -146,10 +145,6 @@ struct Quat
     Quat &operator+=(const Vec4 &o) { return (*this = *this + o); }
     Quat operator-(const Vec4 &o) const { return Quat(x-o.x, y-o.y, z-o.z, w-o.w); }
     Quat &operator-=(const Vec4 &o) { return (*this = *this - o); }
-
-    Quat operator-() const { return Quat(-x, -y, -z, w); }
-
-    void flip() { x = -x; y = -y; z = -z; w = -w; }
 
     Vec3 transform(const Vec3 &p) const
     {
