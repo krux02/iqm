@@ -259,7 +259,15 @@ void animateiqm(float curframe) {
         // If you don't need to use joint scaling in your models, you can simply use the
         // upper 3x3 part of the position matrix instead of the adjoint-transpose shown 
         // here.
-        Matrix3x3 matnorm(mat.b.cross3(mat.c), mat.c.cross3(mat.a), mat.a.cross3(mat.b));
+       
+        auto mat_a = Vec3(mat.a);
+        auto mat_b = Vec3(mat.b);
+        auto mat_c = Vec3(mat.c);
+        Matrix3x3 matnorm( 
+            cross(mat_b, mat_c), 
+            cross(mat_c, mat_a), 
+            cross(mat_a, mat_b)
+        );
 
         *dstnorm = matnorm.transform(*srcnorm);
         // Note that input tangent data has 4 coordinates, 
@@ -267,7 +275,7 @@ void animateiqm(float curframe) {
         *dsttan = matnorm.transform(Vec3(*srctan));
         // Note that bitangent = cross(normal, tangent) * sign, 
         // where the sign is stored in the 4th coordinate of the input tangent data.
-        *dstbitan = dstnorm->cross(*dsttan) * srctan->w;
+        *dstbitan = cross(*dstnorm, *dsttan) * srctan->w;
 
         srcpos++;
         srcnorm++;
