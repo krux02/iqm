@@ -49,7 +49,7 @@
     EXT(PFNGLBINDBUFFERBASEPROC, glBindBufferBase, hasUBO) \
     EXT(PFNGLBINDBUFFERRANGEPROC, glBindBufferRange, hasUBO)
 
-#define DEFEXT(type, name, required) type name##_ = NULL;
+#define DEFEXT(type, name, required) type name##_ = nullptr;
 EXTS(DEFEXT)
  
 void fatal(const char *fmt, ...)
@@ -81,25 +81,26 @@ extern GLuint loadtexture(const char *name, int clamp);
 // of the entire IQM file's data, it is recommended that you copy the data and
 // convert it into a more suitable internal representation for whichever 3D
 // engine you use.
-uint8_t *meshdata = NULL, *animdata = NULL;
+uint8_t *meshdata = nullptr, *animdata = nullptr;
 int nummeshes = 0, numtris = 0, numverts = 0, numjoints = 0, numframes = 0, numanims = 0;
-iqmmesh *meshes = NULL;
-GLuint *textures = NULL;
+iqmmesh *meshes = nullptr;
+GLuint *textures = nullptr;
 GLuint notexture = 0;
-iqmjoint *joints = NULL;
-iqmpose *poses = NULL;
-iqmanim *anims = NULL;
-Matrix3x4 *baseframe = NULL, *inversebaseframe = NULL, *outframe = NULL, *frames = NULL;
+iqmjoint *joints = nullptr;
+iqmpose *poses = nullptr;
+iqmanim *anims = nullptr;
+Matrix3x4 *baseframe = nullptr, *inversebaseframe = nullptr, *outframe = nullptr, *frames = nullptr;
 
 struct vertex
 {
-    GLfloat position[3];
-    GLfloat normal[3];
-    GLfloat tangent[4];
+    Vec3 position;
+    Vec3 normal;
+    Vec4 tangent;
     GLfloat texcoord[2];
     GLubyte blendindex[4];
     GLubyte blendweight[4];
 };
+
 GLuint ebo = 0, vbo = 0, ubo = 0;
 GLint ubosize = 0, bonematsoffset = 0;
 
@@ -138,8 +139,12 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
     textures = new GLuint[nummeshes];
     memset(textures, 0, nummeshes*sizeof(GLuint));
 
-    float *inposition = NULL, *innormal = NULL, *intangent = NULL, *intexcoord = NULL;
-    uint8_t *inblendindex = NULL, *inblendweight = NULL;
+    Vec3* inposition;
+    Vec3* innormal;
+    Vec4* intangent;
+
+    float *intexcoord = nullptr;
+    uint8_t *inblendindex = nullptr, *inblendweight = nullptr;
     const char *str = hdr.ofs_text ? (char *)&buf[hdr.ofs_text] : "";
     iqmvertexarray *vas = (iqmvertexarray *)&buf[hdr.ofs_vertexarrays];
     for(int i = 0; i < (int)hdr.num_vertexarrays; i++)
@@ -147,9 +152,18 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
         iqmvertexarray &va = vas[i];
         switch(va.type)
         {
-        case IQM_POSITION: if(va.format != IQM_FLOAT || va.size != 3) return false; inposition = (float *)&buf[va.offset]; lilswap(inposition, 3*hdr.num_vertexes); break;
-        case IQM_NORMAL: if(va.format != IQM_FLOAT || va.size != 3) return false; innormal = (float *)&buf[va.offset]; lilswap(innormal, 3*hdr.num_vertexes); break;
-        case IQM_TANGENT: if(va.format != IQM_FLOAT || va.size != 4) return false; intangent = (float *)&buf[va.offset]; lilswap(intangent, 4*hdr.num_vertexes); break;
+        case IQM_POSITION: 
+          if(va.format != IQM_FLOAT || va.size != 3) return false; 
+          inposition = (Vec3*)&buf[va.offset]; 
+          break;
+        case IQM_NORMAL: 
+          if(va.format != IQM_FLOAT || va.size != 3) return false;
+          innormal = (Vec3*)&buf[va.offset];
+          break;
+        case IQM_TANGENT: 
+          if(va.format != IQM_FLOAT || va.size != 4) return false; 
+          intangent = (Vec4*)&buf[va.offset]; 
+          break;
         case IQM_TEXCOORD: if(va.format != IQM_FLOAT || va.size != 2) return false; intexcoord = (float *)&buf[va.offset]; lilswap(intexcoord, 2*hdr.num_vertexes); break;
         case IQM_BLENDINDEXES: if(va.format != IQM_UBYTE || va.size != 4) return false; inblendindex = (uint8_t *)&buf[va.offset]; break;
         case IQM_BLENDWEIGHTS: if(va.format != IQM_UBYTE || va.size != 4) return false; inblendweight = (uint8_t *)&buf[va.offset]; break;
@@ -194,9 +208,9 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
     for(int i = 0; i < (int)hdr.num_vertexes; i++)
     {
         vertex &v = verts[i];
-        if(inposition) memcpy(v.position, &inposition[i*3], sizeof(v.position));
-        if(innormal) memcpy(v.normal, &innormal[i*3], sizeof(v.normal));
-        if(intangent) memcpy(v.tangent, &intangent[i*4], sizeof(v.tangent));
+        if(inposition) v.position = inposition[i];
+        if(innormal) v.normal = innormal[i];
+        if(intangent) v.tangent = intangent[i];
         if(intexcoord) memcpy(v.texcoord, &intexcoord[i*2], sizeof(v.texcoord));
         if(inblendindex) memcpy(v.blendindex, &inblendindex[i*4], sizeof(v.blendindex));
         if(inblendweight) memcpy(v.blendweight, &inblendweight[i*4], sizeof(v.blendweight));
@@ -219,8 +233,8 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
     {
         if(animdata != meshdata) delete[] animdata;
         delete[] frames;
-        animdata = NULL;
-        anims = NULL;
+        animdata = nullptr;
+        anims = nullptr;
         frames = 0;
         numframes = 0;
         numanims = 0;
@@ -283,7 +297,7 @@ bool loadiqm(const char *filename)
     FILE *f = fopen(filename, "rb");
     if(!f) return false;
 
-    uint8_t *buf = NULL;
+    uint8_t *buf = nullptr;
     iqmheader hdr;
     if(fread(&hdr, 1, sizeof(hdr), f) != sizeof(hdr) || memcmp(hdr.magic, IQM_MAGIC, sizeof(hdr.magic)))
         goto error;
@@ -345,7 +359,7 @@ struct shader
     const binding *attribs, *texs;
     GLuint vs, ps, program, vsobj, psobj;
 
-    shader(const char *name, const char *vsstr = NULL, const char *psstr = NULL, const binding *attribs = NULL, const binding *texs = NULL) : name(name), vsstr(vsstr), psstr(psstr), attribs(attribs), texs(texs), vs(0), ps(0), program(0), vsobj(0), psobj(0) {}
+    shader(const char *name, const char *vsstr = nullptr, const char *psstr = nullptr, const binding *attribs = nullptr, const binding *texs = nullptr) : name(name), vsstr(vsstr), psstr(psstr), attribs(attribs), texs(texs), vs(0), ps(0), program(0), vsobj(0), psobj(0) {}
 
     static void showinfo(GLuint obj, const char *tname, const char *name)
     {
@@ -367,7 +381,7 @@ struct shader
     {
         const GLchar *source = (const GLchar*)(def + strspn(def, " \t\r\n"));
         obj = glCreateShader_(type);
-        glShaderSource_(obj, 1, &source, NULL);
+        glShaderSource_(obj, 1, &source, nullptr);
         glCompileShader_(obj);
         GLint success;
         glGetShaderiv_(obj, GL_COMPILE_STATUS, &success);
@@ -380,7 +394,7 @@ struct shader
         }
     }
 
-    void link(const binding *attribs = NULL, bool msg = true)
+    void link(const binding *attribs = nullptr, bool msg = true)
     {
         program = vsobj && psobj ? glCreateProgram_() : 0;
         GLint success = 0;
@@ -407,7 +421,7 @@ struct shader
         }
     }
 
-    void compile(const char *vsdef, const char *psdef, const binding *attribs = NULL)
+    void compile(const char *vsdef, const char *psdef, const binding *attribs = nullptr)
     {
         compile(GL_VERTEX_SHADER,   vsobj, vsdef, "VS", name);
         compile(GL_FRAGMENT_SHADER, psobj, psdef, "PS", name);
@@ -443,8 +457,8 @@ struct shader
     }
 };
 
-binding gpuskinattribs[] = { { "vtangent", 1 }, { "vweights", 6 }, { "vbones", 7 }, { NULL, -1 } };
-binding gpuskintexs[] = { { "tex", 0 }, { NULL, -1 } };
+binding gpuskinattribs[] = { { "vtangent", 1 }, { "vweights", 6 }, { "vbones", 7 }, { nullptr, -1 } };
+binding gpuskintexs[] = { { "tex", 0 }, { nullptr, -1 } };
 shader gpuskin("gpu skin",
 
 "#version 120\n"
@@ -484,8 +498,8 @@ shader gpuskin("gpu skin",
 
 gpuskinattribs, gpuskintexs);
 
-binding noskinattribs[] = { { "vtangent", 1 }, { NULL, -1 } };
-binding noskintexs[] = { { "tex", 0 }, { NULL, -1 } };
+binding noskinattribs[] = { { "vtangent", 1 }, { nullptr, -1 } };
+binding noskintexs[] = { { "tex", 0 }, { nullptr, -1 } };
 shader noskin("no skin",
 
 "attribute vec4 vtangent;\n"
@@ -537,7 +551,7 @@ void renderiqm()
         if(hasUBO)
         {
             glBindBuffer_(GL_UNIFORM_BUFFER, ubo);
-            glBufferData_(GL_UNIFORM_BUFFER, ubosize, NULL, GL_STREAM_DRAW);
+            glBufferData_(GL_UNIFORM_BUFFER, ubosize, nullptr, GL_STREAM_DRAW);
             glBufferSubData_(GL_UNIFORM_BUFFER, bonematsoffset, numjoints*sizeof(Matrix3x4), (float*)(outframe));
             glBindBuffer_(GL_UNIFORM_BUFFER, 0);
 
@@ -556,7 +570,7 @@ void renderiqm()
     glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, ebo);
     glBindBuffer_(GL_ARRAY_BUFFER, vbo);
 
-    vertex *vert = NULL;
+    vertex *vert = nullptr;
     glVertexPointer(3, GL_FLOAT, sizeof(vertex), &vert->position);
     glNormalPointer(GL_FLOAT, sizeof(vertex), &vert->normal);
     glTexCoordPointer(2, GL_FLOAT, sizeof(vertex), &vert->texcoord);
@@ -574,7 +588,7 @@ void renderiqm()
         glEnableVertexAttribArray_(7);
     }
    
-    iqmtriangle *tris = NULL;
+    iqmtriangle *tris = nullptr;
     for(int i = 0; i < nummeshes; i++)
     {
         iqmmesh &m = meshes[i];
