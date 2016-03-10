@@ -4,19 +4,6 @@
 #include <algorithm>
 
 struct Vec4;
-struct Vec3;
-
-namespace {
-
-inline float dot(const Vec3& v1, const Vec3& v2);
-inline float dot(const Vec4& v1, const Vec4& v2);
-inline Vec3 cross(const Vec3& v1, const Vec3& v2);
-inline float length2(const Vec3& v);
-inline float length(const Vec3& v);
-inline float length2(const Vec4& v);
-inline float length(const Vec4& v);
-
-}
 
 struct Vec3
 {
@@ -28,8 +15,8 @@ struct Vec3
 
     Vec3() {}
     Vec3(float x, float y, float z) : x(x), y(y), z(z) {}
-    explicit Vec3(const float *v) : x(v[0]), y(v[1]), z(v[2]) {}
-    explicit Vec3(const Vec4 &v);
+//    explicit Vec3(const float *v) : x(v[0]), y(v[1]), z(v[2]) {}
+//    explicit Vec3(const Vec4 &v);
 
     float &operator[](int i) { return v[i]; }
     float operator[](int i) const { return v[i]; }
@@ -55,13 +42,6 @@ struct Vec3
     Vec3 &operator/=(const Vec3 &o) { x /= o.x; y /= o.y; z /= o.z; return *this; }
     Vec3 &operator*=(float k) { x *= k; y *= k; z *= k; return *this; }
     Vec3 &operator/=(float k) { x /= k; y /= k; z /= k; return *this; }
-
-    float magnitude() const { return length(*this); }
-    float squaredlen() const { return length2(*this); }
-    float dist(const Vec3 &o) const { return length(*this - o); }
-    Vec3 normalize() const { return *this * (1.0f / length(*this)); }
-    Vec3 reflect(const Vec3 &n) const { return *this - n*2.0f*dot(*this, n); }
-    Vec3 project(const Vec3 &n) const { return *this - n*dot(*this, n); }
 };
 
 struct Vec4
@@ -75,7 +55,7 @@ struct Vec4
     Vec4() {}
     Vec4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
     explicit Vec4(const Vec3 &p, float w = 0) : x(p.x), y(p.y), z(p.z), w(w) {}
-    explicit Vec4(const float *v) : x(v[0]), y(v[1]), z(v[2]), w(v[3]) {}
+//    explicit Vec4(const float *v) : x(v[0]), y(v[1]), z(v[2]), w(v[3]) {}
 
     float &operator[](int i)       { return v[i]; }
     float  operator[](int i) const { return v[i]; }
@@ -99,12 +79,9 @@ struct Vec4
     Vec4 &operator-=(float k) { x -= k; y -= k; z -= k; w -= k; return *this; }
     Vec4 &operator*=(float k) { x *= k; y *= k; z *= k; w *= k; return *this; }
     Vec4 &operator/=(float k) { x /= k; y /= k; z /= k; w /= k; return *this; }
-
-    float magnitude() const  { return sqrtf(dot(*this, *this)); }
-    Vec4 normalize() const { return *this * (1.0f / length(*this)); }
 };
 
-inline Vec3::Vec3(const Vec4 &v) : x(v.x), y(v.y), z(v.z) {}
+// inline Vec3::Vec3(const Vec4 &v) : x(v.x), y(v.y), z(v.z) {}
 
 namespace {
 
@@ -120,11 +97,14 @@ inline Vec3 cross(const Vec3& v1, const Vec3& v2) {
     return Vec3(v1.y*v2.z-v1.z*v2.y, v1.z*v2.x-v1.x*v2.z, v1.x*v2.y-v1.y*v2.x);
 }
 
-inline float sq(float x) { return x*x; }
 inline float length2(const Vec3& v) { return dot(v,v); }
 inline float length( const Vec3& v) { return sqrtf(length2(v)); }
 inline float length2(const Vec4& v) { return dot(v,v); }
 inline float length(const Vec4& v)  { return sqrtf(length2(v)); }
+inline Vec3 normalize(const Vec3& v) { return v * (1 / length(v)); }
+inline Vec4 normalize(const Vec4& v) { return v * (1 / length(v)); }
+// Vec3 reflect(const Vec3& v, const Vec3 &n) { return v - n*2.0f*dot(v, n); }
+// Vec3 project(const Vec3& v, const Vec3 &n) { return v - n*dot(v, n); }
 
 }
 
@@ -150,7 +130,8 @@ struct Quat : Vec4
 
     void restorew()
     {
-        w = -sqrtf(std::max(1.0f - length2(Vec3(*this)), 0.0f));
+        auto tmp = Vec3(x,y,z);
+        w = -sqrtf(std::max(1.0f - length2(tmp), 0.0f));
     }
 
     Quat normalize() const { return *this * (1.0f / length(*this)); }
@@ -178,17 +159,18 @@ struct Quat : Vec4
 
     Vec3 transform(const Vec3 &p) const
     {
-        Vec3 tmp = Vec3(*this);
+        Vec3 tmp = Vec3(x,y,z);
         return p + cross(tmp, cross(tmp,p) + p*w)*2.0f;
     }
 
     void calcangleaxis(float &angle, Vec3 &axis)
     {
-        float rr = length2(Vec3(*this));
+        auto tmp = Vec3(x,y,z);
+        float rr = length2(tmp);
         if(rr > 0)
         {
             angle = 2*acosf(w);
-            axis = Vec3(*this) * (1 / rr);
+            axis = tmp * (1 / rr);
         }
         else { angle = 0; axis = Vec3(0, 0, 1); }
     }

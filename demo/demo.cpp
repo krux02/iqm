@@ -93,7 +93,9 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf) {
     inversebaseframe = new Matrix3x4[hdr.num_joints];
     for(int32_t i = 0; i < (int32_t)hdr.num_joints; i++) {
         iqmjoint &j = joints[i];
-        baseframe[i] = Matrix3x4(Quat(j.rotate).normalize(), Vec3(j.translate), Vec3(j.scale));
+        auto translate = Vec3(j.translate[0], j.translate[1], j.translate[2]);
+        auto scale = Vec3(j.scale[0], j.scale[1], j.scale[2]);
+        baseframe[i] = Matrix3x4(Quat(j.rotate).normalize(), translate, scale);
         inversebaseframe[i].invert(baseframe[i]);
         if(j.parent >= 0)  {
             baseframe[i] = baseframe[j.parent] * baseframe[i];
@@ -260,9 +262,9 @@ void animateiqm(float curframe) {
         // upper 3x3 part of the position matrix instead of the adjoint-transpose shown 
         // here.
        
-        auto mat_a = Vec3(mat.a);
-        auto mat_b = Vec3(mat.b);
-        auto mat_c = Vec3(mat.c);
+        auto mat_a = Vec3(mat.a.x, mat.a.y, mat.a.z);
+        auto mat_b = Vec3(mat.b.x, mat.b.y, mat.c.z);
+        auto mat_c = Vec3(mat.c.x, mat.c.y, mat.c.z);
         Matrix3x3 matnorm( 
             cross(mat_b, mat_c), 
             cross(mat_c, mat_a), 
@@ -272,7 +274,7 @@ void animateiqm(float curframe) {
         *dstnorm = matnorm.transform(*srcnorm);
         // Note that input tangent data has 4 coordinates, 
         // so only transform the first 3 as the tangent vector.
-        *dsttan = matnorm.transform(Vec3(*srctan));
+        *dsttan = matnorm.transform(Vec3(srctan->x, srctan->y, srctan->z));
         // Note that bitangent = cross(normal, tangent) * sign, 
         // where the sign is stored in the 4th coordinate of the input tangent data.
         *dstbitan = cross(*dstnorm, *dsttan) * srctan->w;
