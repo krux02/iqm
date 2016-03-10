@@ -139,9 +139,9 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
     textures = new GLuint[nummeshes];
     memset(textures, 0, nummeshes*sizeof(GLuint));
 
-    Vec3* inposition;
-    Vec3* innormal;
-    Vec4* intangent;
+    Vec3* inposition = nullptr;
+    Vec3* innormal = nullptr;
+    Vec4* intangent = nullptr;
 
     float *intexcoord = nullptr;
     uint8_t *inblendindex = nullptr, *inblendweight = nullptr;

@@ -3,6 +3,8 @@
 #include <cmath>
 #include <algorithm>
 
+#include <glm/glm.hpp>
+
 struct Vec4;
 
 struct Vec3
@@ -100,10 +102,12 @@ inline Vec4 normalize(const Vec4& v) { return v * (1 / length(v)); }
 struct Matrix3x3;
 struct Matrix3x4;
 
-struct Quat : Vec4
+struct Quat
 {
+    float x,y,z,w;
+
     Quat() {}
-    Quat(float x, float y, float z, float w) : Vec4(x, y, z, w) {}
+    Quat(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
     Quat(float angle, const Vec3 &axis)
     {
         float s = sinf(0.5f*angle);
@@ -112,8 +116,9 @@ struct Quat : Vec4
         z = s*axis.z;
         w = cosf(0.5f*angle);
     }
-    explicit Quat(const Vec3 &v) : Vec4(v.x, v.y, v.z, -sqrtf(std::max(1.0f - length2(v), 0.0f))) {}
-    explicit Quat(const float *v) : Vec4(v[0], v[1], v[2], v[3]) {}
+    explicit Quat(const Vec3 &v) : x(v.x), y(v.y), z(v.z), 
+            w(-sqrtf(std::max(1.0f - length2(v), 0.0f))) {}
+    explicit Quat(const float *v) : x(v[0]), y(v[1]), z(v[2]), w(v[3]) {}
     explicit Quat(const Matrix3x3 &m) { convertmatrix(m); }
     explicit Quat(const Matrix3x4 &m) { convertmatrix(m); }
 
@@ -123,7 +128,7 @@ struct Quat : Vec4
         w = -sqrtf(std::max(1.0f - length2(tmp), 0.0f));
     }
 
-    Quat normalize() const { return *this * (1.0f / length(*this)); }
+    Quat normalize() const { return *this * (1.0f / length(Vec4(x,y,z,w))); }
 
     Quat operator*(float k) const { return Quat(x*k, y*k, z*k, w*k); }
     Quat &operator*=(float k) { return (*this = *this * k); }
