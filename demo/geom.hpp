@@ -59,10 +59,8 @@ struct Vec4
     Vec4 operator+(float k) const { return Vec4(x+k, y+k, z+k, w+k); }
     Vec4 operator-(float k) const { return Vec4(x-k, y-k, z-k, w-k); }
     Vec4 operator-() const { return Vec4(-x, -y, -z, -w); }
-    Vec4 neg3() const { return Vec4(-x, -y, -z, w); }
     Vec4 operator*(float k) const { return Vec4(x*k, y*k, z*k, w*k); }
     Vec4 operator/(float k) const { return Vec4(x/k, y/k, z/k, w/k); }
-    Vec4 addw(float f) const { return Vec4(x, y, z, w + f); }
 
     Vec4 &operator+=(const Vec4 &o) { x += o.x; y += o.y; z += o.z; w += o.w; return *this; }
     Vec4 &operator-=(const Vec4 &o) { x -= o.x; y -= o.y; z -= o.z; w -= o.w; return *this; }
@@ -71,8 +69,6 @@ struct Vec4
     Vec4 &operator*=(float k) { x *= k; y *= k; z *= k; w *= k; return *this; }
     Vec4 &operator/=(float k) { x /= k; y /= k; z /= k; w /= k; return *this; }
 };
-
-// inline Vec3::Vec3(const Vec4 &v) : x(v.x), y(v.y), z(v.z) {}
 
 namespace {
 
@@ -239,14 +235,6 @@ struct Matrix3x3
     }
     Matrix3x3 &operator*=(const Matrix3x3 &o) { return (*this = *this * o); }
 
-    void transpose(const Matrix3x3 &o)
-    {
-        a = Vec3(o.a.x, o.b.x, o.c.x);
-        b = Vec3(o.a.y, o.b.y, o.c.y);
-        c = Vec3(o.a.z, o.b.z, o.c.z);
-    }
-    void transpose() { transpose(Matrix3x3(*this)); }
-
     Vec3 transform(const Vec3 &o) const { return Vec3(dot(a,o), dot(b,o), dot(c,o)); }
     Vec3 transposedtransform(const Vec3 &o) const { return a*o.x + b*o.y + c*o.z; }
 };
@@ -304,10 +292,12 @@ struct Matrix3x4
     Matrix3x4 operator*(const Matrix3x4 &o) const
     {
         return Matrix3x4(
-            (o.a*a.x + o.b*a.y + o.c*a.z).addw(a.w),
-            (o.a*b.x + o.b*b.y + o.c*b.z).addw(b.w),
-            (o.a*c.x + o.b*c.y + o.c*c.z).addw(c.w));
+          o.a*a.x + o.b*a.y + o.c*a.z + Vec4(0,0,0,a.w),
+          o.a*b.x + o.b*b.y + o.c*b.z + Vec4(0,0,0,b.w),
+          o.a*c.x + o.b*c.y + o.c*c.z + Vec4(0,0,0,c.w)
+        );
     }
+
     Matrix3x4 &operator*=(const Matrix3x4 &o) { return (*this = *this * o); }
 
     Vec3 transform(const Vec3 &o) const { 
