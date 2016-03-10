@@ -11,6 +11,10 @@ namespace {
 inline float dot(const Vec3& v1, const Vec3& v2);
 inline float dot(const Vec4& v1, const Vec4& v2);
 inline Vec3 cross(const Vec3& v1, const Vec3& v2);
+inline float length2(const Vec3& v);
+inline float length(const Vec3& v);
+inline float length2(const Vec4& v);
+inline float length(const Vec4& v);
 
 }
 
@@ -52,11 +56,10 @@ struct Vec3
     Vec3 &operator*=(float k) { x *= k; y *= k; z *= k; return *this; }
     Vec3 &operator/=(float k) { x /= k; y /= k; z /= k; return *this; }
 
-    float magnitude() const { return sqrtf(dot(*this, *this)); }
-    float squaredlen() const { return dot(*this, *this); }
-    float dist(const Vec3 &o) const { return (*this - o).magnitude(); }
-    Vec3 normalize() const { return *this * (1.0f / magnitude()); }
-//    Vec3 cross(const Vec3 &o) const { return Vec3(y*o.z-z*o.y, z*o.x-x*o.z, x*o.y-y*o.x); }
+    float magnitude() const { return length(*this); }
+    float squaredlen() const { return length2(*this); }
+    float dist(const Vec3 &o) const { return length(*this - o); }
+    Vec3 normalize() const { return *this * (1.0f / length(*this)); }
     Vec3 reflect(const Vec3 &n) const { return *this - n*2.0f*dot(*this, n); }
     Vec3 project(const Vec3 &n) const { return *this - n*dot(*this, n); }
 };
@@ -98,9 +101,7 @@ struct Vec4
     Vec4 &operator/=(float k) { x /= k; y /= k; z /= k; w /= k; return *this; }
 
     float magnitude() const  { return sqrtf(dot(*this, *this)); }
-    Vec4 normalize() const { return *this * (1.0f / magnitude()); }
-//    Vec3 cross3(const Vec4 &o) const { return Vec3(y*o.z-z*o.y, z*o.x-x*o.z, x*o.y-y*o.x); }
-//    Vec3 cross3(const Vec3 &o) const { return Vec3(y*o.z-z*o.y, z*o.x-x*o.z, x*o.y-y*o.x); }
+    Vec4 normalize() const { return *this * (1.0f / length(*this)); }
 };
 
 inline Vec3::Vec3(const Vec4 &v) : x(v.x), y(v.y), z(v.z) {}
@@ -119,6 +120,12 @@ inline Vec3 cross(const Vec3& v1, const Vec3& v2) {
     return Vec3(v1.y*v2.z-v1.z*v2.y, v1.z*v2.x-v1.x*v2.z, v1.x*v2.y-v1.y*v2.x);
 }
 
+inline float sq(float x) { return x*x; }
+inline float length2(const Vec3& v) { return dot(v,v); }
+inline float length( const Vec3& v) { return sqrtf(length2(v)); }
+inline float length2(const Vec4& v) { return dot(v,v); }
+inline float length(const Vec4& v)  { return sqrtf(length2(v)); }
+
 }
 
 struct Matrix3x3;
@@ -136,17 +143,17 @@ struct Quat : Vec4
         z = s*axis.z;
         w = cosf(0.5f*angle);
     }
-    explicit Quat(const Vec3 &v) : Vec4(v.x, v.y, v.z, -sqrtf(std::max(1.0f - v.squaredlen(), 0.0f))) {}
+    explicit Quat(const Vec3 &v) : Vec4(v.x, v.y, v.z, -sqrtf(std::max(1.0f - length2(v), 0.0f))) {}
     explicit Quat(const float *v) : Vec4(v[0], v[1], v[2], v[3]) {}
     explicit Quat(const Matrix3x3 &m) { convertmatrix(m); }
     explicit Quat(const Matrix3x4 &m) { convertmatrix(m); }
 
     void restorew()
     {
-        w = -sqrtf(std::max(1.0f - Vec3(*this).squaredlen(), 0.0f));
+        w = -sqrtf(std::max(1.0f - length2(Vec3(*this)), 0.0f));
     }
 
-    Quat normalize() const { return *this * (1.0f / magnitude()); }
+    Quat normalize() const { return *this * (1.0f / length(*this)); }
 
     Quat operator*(float k) const { return Quat(x*k, y*k, z*k, w*k); }
     Quat &operator*=(float k) { return (*this = *this * k); }
@@ -177,7 +184,7 @@ struct Quat : Vec4
 
     void calcangleaxis(float &angle, Vec3 &axis)
     {
-        float rr = Vec3(*this).squaredlen();
+        float rr = length2(Vec3(*this));
         if(rr > 0)
         {
             angle = 2*acosf(w);
@@ -313,9 +320,9 @@ struct Matrix3x4
     void invert(const Matrix3x4 &o)
     {
         Matrix3x3 invrot(Vec3(o.a.x, o.b.x, o.c.x), Vec3(o.a.y, o.b.y, o.c.y), Vec3(o.a.z, o.b.z, o.c.z));
-        invrot.a /= invrot.a.squaredlen();
-        invrot.b /= invrot.b.squaredlen();
-        invrot.c /= invrot.c.squaredlen();
+        invrot.a /= length2(invrot.a);
+        invrot.b /= length2(invrot.b);
+        invrot.c /= length2(invrot.c);
         Vec3 trans(o.a.w, o.b.w, o.c.w);
         a = Vec4(invrot.a, -dot(invrot.a, trans));
         b = Vec4(invrot.b, -dot(invrot.b, trans));
