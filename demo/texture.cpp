@@ -2,37 +2,39 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <algorithm>
 
 #include <GL/gl.h>
 #include <GL/glext.h>
 
-#include "util.h"
+#include "util.hpp"
+#include <glm/glm.hpp>
 
 #define FUNCNAME(name) name##1
-#define DEFPIXEL uint OP(r, 0);
+#define DEFPIXEL uint32_t OP(r, 0);
 #define PIXELOP OP(r, 0);
 #define BPP 1
 #include "scale.h"
 
 #define FUNCNAME(name) name##2
-#define DEFPIXEL uint OP(r, 0), OP(g, 1);
+#define DEFPIXEL uint32_t OP(r, 0), OP(g, 1);
 #define PIXELOP OP(r, 0); OP(g, 1);
 #define BPP 2
 #include "scale.h"
 
 #define FUNCNAME(name) name##3
-#define DEFPIXEL uint OP(r, 0), OP(g, 1), OP(b, 2);
+#define DEFPIXEL uint32_t OP(r, 0), OP(g, 1), OP(b, 2);
 #define PIXELOP OP(r, 0); OP(g, 1); OP(b, 2);
 #define BPP 3
 #include "scale.h"
 
 #define FUNCNAME(name) name##4
-#define DEFPIXEL uint OP(r, 0), OP(g, 1), OP(b, 2), OP(a, 3);
+#define DEFPIXEL uint32_t OP(r, 0), OP(g, 1), OP(b, 2), OP(a, 3);
 #define PIXELOP OP(r, 0); OP(g, 1); OP(b, 2); OP(a, 3);
 #define BPP 4
 #include "scale.h"
 
-static void scaletexture(uchar *src, uint sw, uint sh, uint bpp, uint pitch, uchar *dst, uint dw, uint dh)
+static void scaletexture(uint8_t *src, uint32_t sw, uint32_t sh, uint32_t bpp, uint32_t pitch, uint8_t *dst, uint32_t dw, uint32_t dh)
 {
     if(sw == dw*2 && sh == dh*2)
     {
@@ -66,34 +68,34 @@ static void scaletexture(uchar *src, uint sw, uint sh, uint bpp, uint pitch, uch
     }
 }
 
-static inline void bgr2rgb(uchar *data, int len, int bpp)
+static inline void bgr2rgb(uint8_t *data, int32_t len, int32_t bpp)
 {
-    for(uchar *end = &data[len]; data < end; data += bpp)
-        swap(data[0], data[2]);
+    for(uint8_t *end = &data[len]; data < end; data += bpp)
+        std::swap(data[0], data[2]);
 }
 
 struct TGAHeader
 {
-    uchar  identsize;
-    uchar  cmaptype;
-    uchar  imagetype;
-    uchar  cmaporigin[2]; 
-    uchar  cmapsize[2];
-    uchar  cmapentrysize;
-    uchar  xorigin[2];
-    uchar  yorigin[2];
-    uchar  width[2];
-    uchar  height[2];
-    uchar  pixelsize;
-    uchar  descbyte;
+    uint8_t  identsize;
+    uint8_t  cmaptype;
+    uint8_t  imagetype;
+    uint8_t  cmaporigin[2]; 
+    uint8_t  cmapsize[2];
+    uint8_t  cmapentrysize;
+    uint8_t  xorigin[2];
+    uint8_t  yorigin[2];
+    uint8_t  width[2];
+    uint8_t  height[2];
+    uint8_t  pixelsize;
+    uint8_t  descbyte;
 };
 
-static uchar *loadtga(const char *fname, int &w, int &h, int &bpp)
+static uint8_t *loadtga(const char *fname, int32_t &w, int32_t &h, int32_t &bpp)
 {
     FILE *f = fopen(fname, "rb");
-    if(!f) return NULL;
+    if(!f) return nullptr;
 
-    uchar *data = NULL, *cmap = NULL;
+    uint8_t *data = nullptr, *cmap = nullptr;
     TGAHeader hdr;
     if(fread(&hdr, 1, sizeof(hdr), f) != sizeof(hdr)) goto error;
     if(fseek(f, hdr.identsize, SEEK_CUR) < 0) goto error;
@@ -105,21 +107,21 @@ static uchar *loadtga(const char *fname, int &w, int &h, int &bpp)
 
     if(hdr.imagetype==1)
     {
-        int cmapsize = hdr.cmapsize[0] + (hdr.cmapsize[1]<<8);
+        int32_t cmapsize = hdr.cmapsize[0] + (hdr.cmapsize[1]<<8);
         if(hdr.cmapentrysize!=8 || hdr.cmapentrysize!=24 || hdr.cmapentrysize!=32) goto error;
         bpp = hdr.cmapentrysize/8;
-        cmap = new uchar[bpp*cmapsize];
-        if((int)fread(cmap, 1, bpp*cmapsize, f) != bpp*cmapsize) goto error;
+        cmap = new uint8_t[bpp*cmapsize];
+        if((int32_t)fread(cmap, 1, bpp*cmapsize, f) != bpp*cmapsize) goto error;
         if(bpp>=3) bgr2rgb(cmap, bpp*cmapsize, bpp);
-        data = new uchar[bpp*w*h];
-        uchar *idxs = &data[(bpp-1)*w*h];
-        if((int)fread(idxs, 1, w*h, f) != w*h) goto error;
-        uchar *src = idxs, *dst = &data[bpp*w*h];    
-        for(int i = 0; i < h; i++)
+        data = new uint8_t[bpp*w*h];
+        uint8_t *idxs = &data[(bpp-1)*w*h];
+        if((int32_t)fread(idxs, 1, w*h, f) != w*h) goto error;
+        uint8_t *src = idxs, *dst = &data[bpp*w*h];    
+        for(int32_t i = 0; i < h; i++)
         {
             dst -= bpp*w;
-            uchar *row = dst;
-            for(int j = 0; j < w; j++)
+            uint8_t *row = dst;
+            for(int32_t j = 0; j < w; j++)
             {
                 memcpy(row, &cmap[*src++ * bpp], bpp);
                 row += bpp;
@@ -128,40 +130,40 @@ static uchar *loadtga(const char *fname, int &w, int &h, int &bpp)
     }
     else if(hdr.imagetype==2)
     { 
-        data = new uchar[bpp*w*h];
-        uchar *dst = &data[bpp*w*h];
-        for(int i = 0; i < h; i++)
+        data = new uint8_t[bpp*w*h];
+        uint8_t *dst = &data[bpp*w*h];
+        for(int32_t i = 0; i < h; i++)
         {
             dst -= bpp*w;
-            if((int)fread(dst, 1, bpp*w, f) != bpp*w) goto error;
+            if((int32_t)fread(dst, 1, bpp*w, f) != bpp*w) goto error;
         }
         if(bpp>=3) bgr2rgb(data, bpp*w*h, bpp);
     }
     else if(hdr.imagetype==9)
     {
-        int cmapsize = hdr.cmapsize[0] + (hdr.cmapsize[1]<<8);
+        int32_t cmapsize = hdr.cmapsize[0] + (hdr.cmapsize[1]<<8);
         if(hdr.cmapentrysize!=8 || hdr.cmapentrysize!=24 || hdr.cmapentrysize!=32) goto error;
         bpp = hdr.cmapentrysize/8;
-        cmap = new uchar[bpp*cmapsize];
-        if((int)fread(cmap, 1, bpp*cmapsize, f) != bpp*cmapsize) goto error;
+        cmap = new uint8_t[bpp*cmapsize];
+        if((int32_t)fread(cmap, 1, bpp*cmapsize, f) != bpp*cmapsize) goto error;
         if(bpp>=3) bgr2rgb(cmap, bpp*cmapsize, bpp);
-        data = new uchar[bpp*w*h];
-        uchar buf[128];
-        for(uchar *end = &data[bpp*w*h], *dst = end - bpp*w; dst >= data;)
+        data = new uint8_t[bpp*w*h];
+        uint8_t buf[128];
+        for(uint8_t *end = &data[bpp*w*h], *dst = end - bpp*w; dst >= data;)
         {
-            int c = fgetc(f);
+            int32_t c = fgetc(f);
             if(c==EOF) goto error;
             if(c&0x80)
             {
-                int idx = fgetc(f);
+                int32_t idx = fgetc(f);
                 if(idx==EOF) goto error;
-                const uchar *col = &cmap[idx*bpp];
+                const uint8_t *col = &cmap[idx*bpp];
                 c -= 0x7F;
                 c *= bpp;
                 while(c > 0 && dst >= data)
                 {
-                    int n = min(c, int(end-dst));
-                    for(uchar *run = dst+n; dst < run; dst += bpp) memcpy(dst, col, bpp);
+                    int32_t n = std::min(c, int32_t(end-dst));
+                    for(uint8_t *run = dst+n; dst < run; dst += bpp) memcpy(dst, col, bpp);
                     c -= n;
                     if(dst >= end) { end -= bpp*w; dst = end - bpp*w; }
                 }
@@ -171,9 +173,9 @@ static uchar *loadtga(const char *fname, int &w, int &h, int &bpp)
                 c += 1;
                 while(c > 0 && dst >= data)
                 {
-                    int n = min(c, int(end-dst)/bpp);
-                    if((int)fread(buf, 1, n, f) != n) goto error;
-                    for(uchar *src = buf; src < &buf[n]; dst += bpp) memcpy(dst, &cmap[*src++ * bpp], bpp);
+                    int32_t n = std::min(c, int32_t(end-dst)/bpp);
+                    if((int32_t)fread(buf, 1, n, f) != n) goto error;
+                    for(uint8_t *src = buf; src < &buf[n]; dst += bpp) memcpy(dst, &cmap[*src++ * bpp], bpp);
                     c -= n;
                     if(dst >= end) { end -= bpp*w; dst = end - bpp*w; }
                 }
@@ -182,22 +184,22 @@ static uchar *loadtga(const char *fname, int &w, int &h, int &bpp)
     }
     else if(hdr.imagetype==10)
     {
-        data = new uchar[bpp*w*h];
-        uchar buf[4];
-        for(uchar *end = &data[bpp*w*h], *dst = end - bpp*w; dst >= data;)
+        data = new uint8_t[bpp*w*h];
+        uint8_t buf[4];
+        for(uint8_t *end = &data[bpp*w*h], *dst = end - bpp*w; dst >= data;)
         {
-            int c = fgetc(f);
+            int32_t c = fgetc(f);
             if(c==EOF) goto error;
             if(c&0x80)
             {
-                if((int)fread(buf, 1, bpp, f) != bpp) goto error;
+                if((int32_t)fread(buf, 1, bpp, f) != bpp) goto error;
                 c -= 0x7F;
-                if(bpp>=3) swap(buf[0], buf[2]);
+                if(bpp>=3) std::swap(buf[0], buf[2]);
                 c *= bpp;
                 while(c > 0)
                 {
-                    int n = min(c, int(end-dst));
-                    for(uchar *run = dst+n; dst < run; dst += bpp) memcpy(dst, buf, bpp);
+                    int32_t n = std::min(c, int32_t(end-dst));
+                    for(uint8_t *run = dst+n; dst < run; dst += bpp) memcpy(dst, buf, bpp);
                     c -= n;
                     if(dst >= end) { end -= bpp*w; dst = end - bpp*w; if(dst < data) break; }
                 }
@@ -208,8 +210,8 @@ static uchar *loadtga(const char *fname, int &w, int &h, int &bpp)
                 c *= bpp;
                 while(c > 0)
                 {
-                    int n = min(c, int(end-dst));
-                    if((int)fread(dst, 1, n, f) != n) goto error;
+                    int32_t n = std::min(c, int32_t(end-dst));
+                    if((int32_t)fread(dst, 1, n, f) != n) goto error;
                     if(bpp>=3) bgr2rgb(dst, n, bpp);
                     dst += n;
                     c -= n;
@@ -228,10 +230,10 @@ error:
     if(data) delete[] data;
     if(cmap) delete[] cmap;
     fclose(f);
-    return NULL;
+    return nullptr;
 }
 
-static GLenum texformat(int bpp)
+static GLenum texformat(int32_t bpp)
 {
     switch(bpp)
     {
@@ -243,7 +245,7 @@ static GLenum texformat(int bpp)
     }
 }
 
-int formatsize(GLenum format)
+int32_t formatsize(GLenum format)
 {
     switch(format)
     {
@@ -256,12 +258,12 @@ int formatsize(GLenum format)
     }
 }
 
-void resizetexture(int w, int h, bool mipmap, GLenum target, int &tw, int &th)
+void resizetexture(int32_t w, int32_t h, bool mipmap, GLenum target, int32_t &tw, int32_t &th)
 {
     GLint sizelimit = 4096;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &sizelimit);
-    w = min(w, sizelimit);
-    h = min(h, sizelimit);
+    w = std::min(w, sizelimit);
+    h = std::min(h, sizelimit);
     if(mipmap || w&(w-1) || h&(h-1))
     {
         tw = th = 1;
@@ -277,31 +279,31 @@ void resizetexture(int w, int h, bool mipmap, GLenum target, int &tw, int &th)
     }
 }
 
-void uploadtexture(GLenum target, GLenum internal, int tw, int th, GLenum format, GLenum type, void *pixels, int pw, int ph, bool mipmap)
+void uploadtexture(GLenum target, GLenum internal, int32_t tw, int32_t th, GLenum format, GLenum type, void *pixels, int32_t pw, int32_t ph, bool mipmap)
 {
-    int bpp = formatsize(format);
-    uchar *buf = NULL;
+    int32_t bpp = formatsize(format);
+    uint8_t *buf = nullptr;
     if(pw!=tw || ph!=th)
     {
-        buf = new uchar[tw*th*bpp];
-        scaletexture((uchar *)pixels, pw, ph, bpp, pw*bpp, buf, tw, th);
+        buf = new uint8_t[tw*th*bpp];
+        scaletexture((uint8_t *)pixels, pw, ph, bpp, pw*bpp, buf, tw, th);
     }
-    for(int level = 0;; level++)
+    for(int32_t level = 0;; level++)
     {
-        uchar *src = buf ? buf : (uchar *)pixels;
+        uint8_t *src = buf ? buf : (uint8_t *)pixels;
         if(target==GL_TEXTURE_1D) glTexImage1D(target, level, internal, tw, 0, format, type, src);
         else glTexImage2D(target, level, internal, tw, th, 0, format, type, src);
-        if(!mipmap || max(tw, th) <= 1) break;
-        int srcw = tw, srch = th;
+        if(!mipmap || std::max(tw, th) <= 1) break;
+        int32_t srcw = tw, srch = th;
         if(tw > 1) tw /= 2;
         if(th > 1) th /= 2;
-        if(!buf) buf = new uchar[tw*th*bpp];
+        if(!buf) buf = new uint8_t[tw*th*bpp];
         scaletexture(src, srcw, srch, bpp, srcw*bpp, buf, tw, th);
     }
     if(buf) delete[] buf;
 }
 
-void createtexture(int tnum, int w, int h, void *pixels, int clamp, int filter, GLenum component = GL_RGB, GLenum target = GL_TEXTURE_2D, int pw = 0, int ph = 0)
+void createtexture(int32_t tnum, int32_t w, int32_t h, void *pixels, int32_t clamp, int32_t filter, GLenum component = GL_RGB, GLenum target = GL_TEXTURE_2D, int32_t pw = 0, int32_t ph = 0)
 {
     glBindTexture(target, tnum);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -327,19 +329,19 @@ void createtexture(int tnum, int w, int h, void *pixels, int clamp, int filter, 
 
     if(!pw) pw = w;
     if(!ph) ph = h;
-    int tw = w, th = h;
+    int32_t tw = w, th = h;
     bool mipmap = filter > 1;
     if(pixels) resizetexture(w, h, mipmap, target, tw, th);
     uploadtexture(target, component, tw, th, format, type, pixels, pw, ph, mipmap && pixels);
 }
 
-GLuint loadtexture(const char *name, int clamp)
+GLuint loadtexture(const char *name, int32_t clamp)
 {
-    int w, h, b;
-    uchar *data = loadtga(name, w, h, b); 
-    if(!data) { printf("%s: failed loading\n", name); return NULL; }
+    int32_t w, h, b;
+    uint8_t *data = loadtga(name, w, h, b); 
+    if(!data) { printf("%s: failed loading\n", name); return 0; }
     GLenum format = texformat(b*8);
-    if(!format) { printf("%s: failed loading\n", name); delete[] data; return NULL; }
+    if(!format) { printf("%s: failed loading\n", name); delete[] data; return 0; }
 
     GLuint tex;
     glGenTextures(1, &tex);

@@ -1,0 +1,6 @@
+*.o
+*.exe
+demo
+gpu-demo
+iqm
+upgrade

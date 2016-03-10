@@ -8,9 +8,12 @@
 #include <GL/glext.h>
 #include <GL/freeglut.h>
 
-#include "util.h"
-#include "geom.h"
+#include "util.hpp"
+#include "geom.hpp"
 #include "iqm.h"
+
+#include <glm/glm.hpp>
+#include <algorithm>
 
 #define EXTS(EXT) \
     EXT(PFNGLUSEPROGRAMPROC, glUseProgram, true) \
@@ -78,7 +81,7 @@ extern GLuint loadtexture(const char *name, int clamp);
 // of the entire IQM file's data, it is recommended that you copy the data and
 // convert it into a more suitable internal representation for whichever 3D
 // engine you use.
-uchar *meshdata = NULL, *animdata = NULL;
+uint8_t *meshdata = NULL, *animdata = NULL;
 int nummeshes = 0, numtris = 0, numverts = 0, numjoints = 0, numframes = 0, numanims = 0;
 iqmmesh *meshes = NULL;
 GLuint *textures = NULL;
@@ -117,14 +120,14 @@ void cleanupiqm()
     if(ubo) glDeleteBuffers_(1, &ubo);
 }
 
-bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uchar *buf)
+bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
 {
     if(meshdata) return false;
 
-    lilswap((uint *)&buf[hdr.ofs_vertexarrays], hdr.num_vertexarrays*sizeof(iqmvertexarray)/sizeof(uint));
-    lilswap((uint *)&buf[hdr.ofs_triangles], hdr.num_triangles*sizeof(iqmtriangle)/sizeof(uint));
-    lilswap((uint *)&buf[hdr.ofs_meshes], hdr.num_meshes*sizeof(iqmmesh)/sizeof(uint));
-    lilswap((uint *)&buf[hdr.ofs_joints], hdr.num_joints*sizeof(iqmjoint)/sizeof(uint));
+    lilswap((uint32_t *)&buf[hdr.ofs_vertexarrays], hdr.num_vertexarrays*sizeof(iqmvertexarray)/sizeof(uint32_t));
+    lilswap((uint32_t *)&buf[hdr.ofs_triangles], hdr.num_triangles*sizeof(iqmtriangle)/sizeof(uint32_t));
+    lilswap((uint32_t *)&buf[hdr.ofs_meshes], hdr.num_meshes*sizeof(iqmmesh)/sizeof(uint32_t));
+    lilswap((uint32_t *)&buf[hdr.ofs_joints], hdr.num_joints*sizeof(iqmjoint)/sizeof(uint32_t));
 
     meshdata = buf;
     nummeshes = hdr.num_meshes;
@@ -136,7 +139,7 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uchar *buf)
     memset(textures, 0, nummeshes*sizeof(GLuint));
 
     float *inposition = NULL, *innormal = NULL, *intangent = NULL, *intexcoord = NULL;
-    uchar *inblendindex = NULL, *inblendweight = NULL;
+    uint8_t *inblendindex = NULL, *inblendweight = NULL;
     const char *str = hdr.ofs_text ? (char *)&buf[hdr.ofs_text] : "";
     iqmvertexarray *vas = (iqmvertexarray *)&buf[hdr.ofs_vertexarrays];
     for(int i = 0; i < (int)hdr.num_vertexarrays; i++)
@@ -148,8 +151,8 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uchar *buf)
         case IQM_NORMAL: if(va.format != IQM_FLOAT || va.size != 3) return false; innormal = (float *)&buf[va.offset]; lilswap(innormal, 3*hdr.num_vertexes); break;
         case IQM_TANGENT: if(va.format != IQM_FLOAT || va.size != 4) return false; intangent = (float *)&buf[va.offset]; lilswap(intangent, 4*hdr.num_vertexes); break;
         case IQM_TEXCOORD: if(va.format != IQM_FLOAT || va.size != 2) return false; intexcoord = (float *)&buf[va.offset]; lilswap(intexcoord, 2*hdr.num_vertexes); break;
-        case IQM_BLENDINDEXES: if(va.format != IQM_UBYTE || va.size != 4) return false; inblendindex = (uchar *)&buf[va.offset]; break;
-        case IQM_BLENDWEIGHTS: if(va.format != IQM_UBYTE || va.size != 4) return false; inblendweight = (uchar *)&buf[va.offset]; break;
+        case IQM_BLENDINDEXES: if(va.format != IQM_UBYTE || va.size != 4) return false; inblendindex = (uint8_t *)&buf[va.offset]; break;
+        case IQM_BLENDWEIGHTS: if(va.format != IQM_UBYTE || va.size != 4) return false; inblendweight = (uint8_t *)&buf[va.offset]; break;
         }
     }
     meshes = (iqmmesh *)&buf[hdr.ofs_meshes];
@@ -206,7 +209,7 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uchar *buf)
     return true;
 }
 
-bool loadiqmanims(const char *filename, const iqmheader &hdr, uchar *buf)
+bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
 {
     if((int)hdr.num_poses != numjoints) return false;
 
@@ -221,9 +224,9 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uchar *buf)
         numanims = 0;
     }        
 
-    lilswap((uint *)&buf[hdr.ofs_poses], hdr.num_poses*sizeof(iqmpose)/sizeof(uint));
-    lilswap((uint *)&buf[hdr.ofs_anims], hdr.num_anims*sizeof(iqmanim)/sizeof(uint));
-    lilswap((ushort *)&buf[hdr.ofs_frames], hdr.num_frames*hdr.num_framechannels);
+    lilswap((uint32_t *)&buf[hdr.ofs_poses], hdr.num_poses*sizeof(iqmpose)/sizeof(uint32_t));
+    lilswap((uint32_t *)&buf[hdr.ofs_anims], hdr.num_anims*sizeof(iqmanim)/sizeof(uint32_t));
+    lilswap((uint16_t *)&buf[hdr.ofs_frames], hdr.num_frames*hdr.num_framechannels);
 
     animdata = buf;
     numanims = hdr.num_anims;
@@ -233,7 +236,7 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uchar *buf)
     anims = (iqmanim *)&buf[hdr.ofs_anims];
     poses = (iqmpose *)&buf[hdr.ofs_poses];
     frames = new Matrix3x4[hdr.num_frames * hdr.num_poses];
-    ushort *framedata = (ushort *)&buf[hdr.ofs_frames];
+    uint16_t *framedata = (uint16_t *)&buf[hdr.ofs_frames];
 
     for(int i = 0; i < (int)hdr.num_frames; i++)
     {
@@ -278,16 +281,16 @@ bool loadiqm(const char *filename)
     FILE *f = fopen(filename, "rb");
     if(!f) return false;
 
-    uchar *buf = NULL;
+    uint8_t *buf = NULL;
     iqmheader hdr;
     if(fread(&hdr, 1, sizeof(hdr), f) != sizeof(hdr) || memcmp(hdr.magic, IQM_MAGIC, sizeof(hdr.magic)))
         goto error;
-    lilswap(&hdr.version, (sizeof(hdr) - sizeof(hdr.magic))/sizeof(uint));
+    lilswap(&hdr.version, (sizeof(hdr) - sizeof(hdr.magic))/sizeof(uint32_t));
     if(hdr.version != IQM_VERSION)
         goto error;
     if(hdr.filesize > (16<<20)) 
         goto error; // sanity check... don't load files bigger than 16 MB
-    buf = new uchar[hdr.filesize];
+    buf = new uint8_t[hdr.filesize];
     if(fread(buf + sizeof(hdr), 1, hdr.filesize - sizeof(hdr), f) != hdr.filesize - sizeof(hdr))
         goto error;
 
@@ -677,7 +680,7 @@ void displayfunc()
     glutSwapBuffers();
 }
 
-void keyboardfunc(uchar c, int x, int y)
+void keyboardfunc(uint8_t c, int x, int y)
 {
     switch(c)   
     {
@@ -702,7 +705,7 @@ int main(int argc, char **argv)
         if(argv[i][0] == '-') switch(argv[i][1])
         {
         case 's':
-            if(i + 1 < argc) scale = clamp(atof(argv[++i]), 1e-8, 1e8);
+            if(i + 1 < argc) scale = glm::clamp(atof(argv[++i]), 1e-8, 1e8);
             break;
         case 'r':
             if(i + 1 < argc) rotate = atof(argv[++i]);

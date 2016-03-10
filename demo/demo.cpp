@@ -7,6 +7,8 @@
 #include <GL/glext.h>
 #include <GL/glut.h>
 
+#include <glm/glm.hpp>
+
 #include "util.hpp"
 #include "geom.hpp"
 #include "iqm.h"
