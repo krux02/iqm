@@ -5,8 +5,15 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
+#include <glm/gtc/quaternion.hpp>
 
-#if 0
+#if 1
+
+using Vec3 = glm::fvec3;
+using Vec4 = glm::fvec4;
+
+#else
+
 struct Vec4;
 
 struct Vec3
@@ -99,11 +106,14 @@ inline Vec4 normalize(const Vec4& v) { return v * (1 / length(v)); }
 
 #endif
 
-struct Matrix3x3;
-struct Matrix3x4;
 
-using Vec3 = glm::fvec3;
-using Vec4 = glm::fvec4;
+#if 0
+
+using Quat = glm::fquat;
+
+#else
+
+struct Matrix3x3;
 
 struct Quat
 {
@@ -111,28 +121,7 @@ struct Quat
 
     Quat() {}
     Quat(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
-    Quat(float angle, const Vec3 &axis)
-    {
-        float s = sinf(0.5f*angle);
-        x = s*axis.x;
-        y = s*axis.y;
-        z = s*axis.z;
-        w = cosf(0.5f*angle);
-    }
-    explicit Quat(const Vec3 &v) : x(v.x), y(v.y), z(v.z), 
-            w(-sqrtf(std::max(1.0f - length2(v), 0.0f))) {}
-    //explicit Quat(const float *v) : x(v[0]), y(v[1]), z(v[2]), w(v[3]) {}
-    explicit Quat(const Matrix3x3 &m) { convertmatrix(m); }
-
-    void restorew()
-    {
-        auto tmp = Vec3(x,y,z);
-        w = -sqrtf(std::max(1.0f - length2(tmp), 0.0f));
-    }
-
-    Quat normalize() const { return *this * (1.0f / length(Vec4(x,y,z,w))); }
-
-    Quat operator*(float k) const { return Quat(x*k, y*k, z*k, w*k); }
+    /*
     Quat &operator*=(float k) { return (*this = *this * k); }
 
     Quat operator*(const Quat &o) const
@@ -148,63 +137,40 @@ struct Quat
     Quat &operator+=(const Vec4 &o) { return (*this = *this + o); }
     Quat operator-(const Vec4 &o) const { return Quat(x-o.x, y-o.y, z-o.z, w-o.w); }
     Quat &operator-=(const Vec4 &o) { return (*this = *this - o); }
-
-    Vec3 transform(const Vec3 &p) const
-    {
-        Vec3 tmp = Vec3(x,y,z);
-        return p + cross(tmp, cross(tmp,p) + p*w)*2.0f;
-    }
-
-    void calcangleaxis(float &angle, Vec3 &axis)
-    {
-        auto tmp = Vec3(x,y,z);
-        float rr = length2(tmp);
-        if(rr > 0)
-        {
-            angle = 2*acosf(w);
-            axis = tmp * (1 / rr);
-        }
-        else { angle = 0; axis = Vec3(0, 0, 1); }
-    }
-     
-    template<class M>
-    void convertmatrix(const M &m)
-    {
-        float trace = m.a.x + m.b.y + m.c.z;
-        if(trace>0)
-        {
-            float r = sqrtf(1 + trace), inv = 0.5f/r;
-            w = 0.5f*r;
-            x = (m.c.y - m.b.z)*inv;
-            y = (m.a.z - m.c.x)*inv;
-            z = (m.b.x - m.a.y)*inv;
-        }
-        else if(m.a.x > m.b.y && m.a.x > m.c.z)
-        {
-            float r = sqrtf(1 + m.a.x - m.b.y - m.c.z), inv = 0.5f/r;
-            x = 0.5f*r;
-            y = (m.b.x + m.a.y)*inv;
-            z = (m.a.z + m.c.x)*inv;
-            w = (m.c.y - m.b.z)*inv;
-        }
-        else if(m.b.y > m.c.z)
-        {
-            float r = sqrtf(1 + m.b.y - m.a.x - m.c.z), inv = 0.5f/r;
-            x = (m.b.x + m.a.y)*inv;
-            y = 0.5f*r;
-            z = (m.c.y + m.b.z)*inv;
-            w = (m.a.z - m.c.x)*inv;
-        }
-        else
-        {
-            float r = sqrtf(1 + m.c.z - m.a.x - m.b.y), inv = 0.5f/r;
-            x = (m.a.z + m.c.x)*inv;
-            y = (m.c.y + m.b.z)*inv;
-            z = 0.5f*r;
-            w = (m.b.x - m.a.y)*inv;
-        }
-    }
+    */
 };
+
+namespace {
+
+float length(const Quat& q) {
+  return q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
+}
+
+Quat operator*(const Quat& q, float k) {
+  return Quat(q.x*k, q.y*k, q.z*k, q.w*k);
+}
+
+Quat normalize(Quat q) { 
+  return q * (1.0f / length(q));
+}
+
+void test() {
+  auto  q1 = Quat(1,2,3,4);
+  auto& q2 = *reinterpret_cast<glm::fquat*>(&q1);
+
+  printf("x: %f\n", q1.x);
+  printf("y: %f\n", q1.y);
+  printf("z: %f\n", q1.z);
+  printf("w: %f\n", q1.w);
+  printf("x: %f\n", q2.x);
+  printf("y: %f\n", q2.y);
+  printf("z: %f\n", q2.z);
+  printf("w: %f\n", q2.w);
+}
+
+}
+
+#endif
 
 struct Matrix3x3
 {
