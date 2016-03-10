@@ -4,7 +4,9 @@
 #include <algorithm>
 
 #include <glm/glm.hpp>
+#include <glm/gtx/norm.hpp>
 
+#if 0
 struct Vec4;
 
 struct Vec3
@@ -95,8 +97,13 @@ inline Vec4 normalize(const Vec4& v) { return v * (1 / length(v)); }
 
 }
 
+#endif
+
 struct Matrix3x3;
 struct Matrix3x4;
+
+using Vec3 = glm::fvec3;
+using Vec4 = glm::fvec4;
 
 struct Quat
 {
