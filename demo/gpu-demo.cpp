@@ -538,14 +538,14 @@ void renderiqm()
         {
             glBindBuffer_(GL_UNIFORM_BUFFER, ubo);
             glBufferData_(GL_UNIFORM_BUFFER, ubosize, NULL, GL_STREAM_DRAW);
-            glBufferSubData_(GL_UNIFORM_BUFFER, bonematsoffset, numjoints*sizeof(Matrix3x4), outframe[0].a.v);
+            glBufferSubData_(GL_UNIFORM_BUFFER, bonematsoffset, numjoints*sizeof(Matrix3x4), (float*)(outframe));
             glBindBuffer_(GL_UNIFORM_BUFFER, 0);
 
             glBindBufferBase_(GL_UNIFORM_BUFFER, 0, ubo);
         }
         else 
         {
-            glUniformMatrix3x4fv_(gpuskin.getparam("bonemats"), numjoints, GL_FALSE, outframe[0].a.v);
+            glUniformMatrix3x4fv_(gpuskin.getparam("bonemats"), numjoints, GL_FALSE, (float*)(outframe));
         }
     }
     else 

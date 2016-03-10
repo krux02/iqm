@@ -7,19 +7,13 @@ struct Vec4;
 
 struct Vec3
 {
-    union
-    {
-        struct { float x, y, z; };
-        float v[3];
-    };
+    float x, y, z;
 
     Vec3() {}
     Vec3(float x, float y, float z) : x(x), y(y), z(z) {}
-//    explicit Vec3(const float *v) : x(v[0]), y(v[1]), z(v[2]) {}
-//    explicit Vec3(const Vec4 &v);
 
-    float &operator[](int i) { return v[i]; }
-    float operator[](int i) const { return v[i]; }
+    float &operator[](int i) { return (&x)[i]; }
+    float operator[](int i) const { return (&x)[i]; }
 
     bool operator==(const Vec3 &o) const { return x == o.x && y == o.y && z == o.z; }
     bool operator!=(const Vec3 &o) const { return x != o.x || y != o.y || z != o.z; }
@@ -45,20 +39,15 @@ struct Vec3
 };
 
 struct Vec4
-{
-    union
-    {
-        struct { float x, y, z, w; };
-        float v[4];
-    };
+{ 
+    float x, y, z, w; 
 
     Vec4() {}
     Vec4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
     explicit Vec4(const Vec3 &p, float w = 0) : x(p.x), y(p.y), z(p.z), w(w) {}
-//    explicit Vec4(const float *v) : x(v[0]), y(v[1]), z(v[2]), w(v[3]) {}
 
-    float &operator[](int i)       { return v[i]; }
-    float  operator[](int i) const { return v[i]; }
+    float &operator[](int i)       { return (&x)[i]; }
+    float  operator[](int i) const { return (&x)[i]; }
 
     bool operator==(const Vec4 &o) const { return x == o.x && y == o.y && z == o.z && w == o.w; }
     bool operator!=(const Vec4 &o) const { return x != o.x || y != o.y || z != o.z || w != o.w; }
