@@ -251,7 +251,7 @@ void animateiqm(float curframe) {
         // Position uses the full 3x4 transformation matrix.
         // Normals and tangents only use the 3x3 rotation part 
         // of the transformation matrix.
-        *dstpos = mat.transform(*srcpos);
+        *dstpos = transpose(mat) * Vec4(*srcpos,1);
 
         // Note that if the matrix includes non-uniform scaling, normal vectors
         // must be transformed by the inverse-transpose of the matrix to have the

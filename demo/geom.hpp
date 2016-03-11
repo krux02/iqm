@@ -328,22 +328,6 @@ struct Matrix3x4
     }
 
     Matrix3x4 &operator*=(const Matrix3x4 &o) { return (*this = *this * o); }
-
-    Vec3 transform(const Vec3 &o) const { 
-      return Vec3(
-          dot(a, Vec4(o,1)),
-          dot(b, Vec4(o,1)),
-          dot(c, Vec4(o,1))
-      );
-    }
-
-    Vec3 transformnormal(const Vec3 &o) const { 
-      return Vec3(
-          dot(a, Vec4(o,0)),
-          dot(b, Vec4(o,0)),
-          dot(c, Vec4(o,0))
-      );
-    }
 };
 
 namespace {
@@ -375,7 +359,7 @@ inline Matrix3x4 transpose(const Matrix4x3& mat) {
 }
 
 inline Vec3 operator*(const Matrix4x3& mat, const Vec4& v) {
-  return Vec3( mat.a * v.x + mat.b * v.y + mat.c * v.z );
+  return Vec3( mat.a * v.x + mat.b * v.y + mat.c * v.z + mat.d * v.w );
 }
 
 inline Vec3 operator*(const Matrix3x3& mat, const Vec3& v) {
@@ -383,15 +367,22 @@ inline Vec3 operator*(const Matrix3x3& mat, const Vec3& v) {
 }
 
 inline void print(const Matrix3x3& m) {
-  printf("    %f %f %f\n", m.a.x, m.a.y, m.a.z);
-  printf("    %f %f %f\n", m.b.x, m.b.y, m.b.z);
-  printf("    %f %f %f\n", m.c.x, m.c.y, m.c.z);
+  printf("    %f %f %f\n", m.a.x, m.b.x, m.c.x);
+  printf("    %f %f %f\n", m.a.y, m.b.y, m.c.y);
+  printf("    %f %f %f\n", m.a.z, m.b.z, m.c.z);
 }
 
 inline void print(const Matrix3x4& m) {
-  printf("    %f %f %f %f\n", m.a.x, m.a.y, m.a.z, m.a.w);
-  printf("    %f %f %f %f\n", m.b.x, m.b.y, m.b.z, m.a.w);
-  printf("    %f %f %f %f\n", m.c.x, m.c.y, m.c.z, m.a.w);
+  printf("    %f %f %f\n", m.a.x, m.b.x, m.c.x);
+  printf("    %f %f %f\n", m.a.y, m.b.y, m.c.y);
+  printf("    %f %f %f\n", m.a.z, m.b.z, m.c.z);
+  printf("    %f %f %f\n", m.a.w, m.b.w, m.c.w);
+}
+
+inline void print(const Matrix4x3& m) {
+  printf("    %f %f %f %f\n", m.a.x, m.b.x, m.c.x, m.d.x);
+  printf("    %f %f %f %f\n", m.a.y, m.b.y, m.c.y, m.d.y);
+  printf("    %f %f %f %f\n", m.a.z, m.b.z, m.c.z, m.d.z);
 }
 
 inline void print(Quat q) {
