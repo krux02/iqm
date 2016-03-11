@@ -95,8 +95,8 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf) {
         iqmjoint &j = joints[i];
         auto translate = Vec3(j.translate[0], j.translate[1], j.translate[2]);
         auto scale = Vec3(j.scale[0], j.scale[1], j.scale[2]);
-        auto rotate = normalize(Quat(j.rotate[0], j.rotate[1], j.rotate[2], j.rotate[3]));
-        baseframe[i] = Matrix3x4(rotate, translate, scale);
+        auto rotate_mat = Matrix3x3(normalize(*(Quat*)(j.rotate)));
+        baseframe[i] = Matrix3x4(rotate_mat * Matrix3x3(scale), translate);
         inversebaseframe[i].invert(baseframe[i]);
         if(j.parent >= 0)  {
             baseframe[i] = baseframe[j.parent] * baseframe[i];
@@ -146,15 +146,15 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf) {
     for(int32_t i = 0; i < (int32_t)hdr.num_frames; i++) {
         for(int32_t j = 0; j < (int32_t)hdr.num_poses; j++) {
             iqmpose &p = poses[j];
-            Quat rotate;
+            float rotate[4];
             Vec3 translate, scale;
             translate.x = p.channeloffset[0]; if(p.mask&0x01) translate.x += *framedata++ * p.channelscale[0];
             translate.y = p.channeloffset[1]; if(p.mask&0x02) translate.y += *framedata++ * p.channelscale[1];
             translate.z = p.channeloffset[2]; if(p.mask&0x04) translate.z += *framedata++ * p.channelscale[2];
-            rotate.x = p.channeloffset[3]; if(p.mask&0x08) rotate.x += *framedata++ * p.channelscale[3];
-            rotate.y = p.channeloffset[4]; if(p.mask&0x10) rotate.y += *framedata++ * p.channelscale[4];
-            rotate.z = p.channeloffset[5]; if(p.mask&0x20) rotate.z += *framedata++ * p.channelscale[5];
-            rotate.w = p.channeloffset[6]; if(p.mask&0x40) rotate.w += *framedata++ * p.channelscale[6];
+            rotate[0] = p.channeloffset[3]; if(p.mask&0x08) rotate[0] += *framedata++ * p.channelscale[3];
+            rotate[1] = p.channeloffset[4]; if(p.mask&0x10) rotate[1] += *framedata++ * p.channelscale[4];
+            rotate[2] = p.channeloffset[5]; if(p.mask&0x20) rotate[2] += *framedata++ * p.channelscale[5];
+            rotate[3] = p.channeloffset[6]; if(p.mask&0x40) rotate[3] += *framedata++ * p.channelscale[6];
             scale.x = p.channeloffset[7]; if(p.mask&0x80) scale.x += *framedata++ * p.channelscale[7];
             scale.y = p.channeloffset[8]; if(p.mask&0x100) scale.y += *framedata++ * p.channelscale[8];
             scale.z = p.channeloffset[9]; if(p.mask&0x200) scale.z += *framedata++ * p.channelscale[9];
@@ -164,7 +164,8 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf) {
             //   (parentPose * parentInverseBasePose) * (parentBasePose * childPose * childInverseBasePose) =>
             //   parentPose * (parentInverseBasePose * parentBasePose) * childPose * childInverseBasePose =>
             //   parentPose * childPose * childInverseBasePose
-            Matrix3x4 m(normalize(rotate), translate, scale);
+            auto rotateQuat = normalize(*(Quat*)(rotate));
+            auto m = Matrix3x4(Matrix3x3(rotateQuat) * Matrix3x3(scale), translate);
             if(p.parent >= 0) frames[i*hdr.num_poses + j] = baseframe[p.parent] * m * inversebaseframe[j];
             else frames[i*hdr.num_poses + j] = m * inversebaseframe[j];
         }
@@ -430,6 +431,7 @@ void keyboardfunc(uint8_t c, int32_t x, int32_t y) {
 }
 
 int32_t main(int argc, char **argv) {
+    //test();
     glutInitWindowSize(640, 480);
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_DEPTH | GLUT_RGB);

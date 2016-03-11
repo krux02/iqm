@@ -179,8 +179,8 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
         iqmjoint &j = joints[i];
         auto translate = Vec3(j.translate[0], j.translate[1], j.translate[2]);
         auto scale = Vec3(j.scale[0], j.scale[1], j.scale[2]);
-        auto rotate = normalize(Quat(j.rotate[0], j.rotate[1], j.rotate[2], j.rotate[3]));
-        baseframe[i] = Matrix3x4(rotate, translate, scale);
+        auto rotate = normalize(*(Quat*)(j.rotate));
+        baseframe[i] = Matrix3x4(Matrix3x3(rotate) * Matrix3x3(scale), translate);
         inversebaseframe[i].invert(baseframe[i]);
         if(j.parent >= 0) 
         {
@@ -261,7 +261,8 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
         {
             iqmpose &p = poses[j];
             Quat rotate;
-            Vec3 translate, scale;
+            auto translate = Vec3(0,0,0);
+            auto scale = Vec3(0,0,0);
             translate.x = p.channeloffset[0]; if(p.mask&0x01) translate.x += *framedata++ * p.channelscale[0];
             translate.y = p.channeloffset[1]; if(p.mask&0x02) translate.y += *framedata++ * p.channelscale[1];
             translate.z = p.channeloffset[2]; if(p.mask&0x04) translate.z += *framedata++ * p.channelscale[2];
@@ -278,7 +279,7 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
             //   (parentPose * parentInverseBasePose) * (parentBasePose * childPose * childInverseBasePose) =>
             //   parentPose * (parentInverseBasePose * parentBasePose) * childPose * childInverseBasePose =>
             //   parentPose * childPose * childInverseBasePose
-            Matrix3x4 m(normalize(rotate), translate, scale);
+            Matrix3x4 m( Matrix3x3(normalize(rotate)) * Matrix3x3(scale), translate);
             if(p.parent >= 0) frames[i*hdr.num_poses + j] = baseframe[p.parent] * m * inversebaseframe[j];
             else frames[i*hdr.num_poses + j] = m * inversebaseframe[j];
         }

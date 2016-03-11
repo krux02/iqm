@@ -107,20 +107,20 @@ inline Vec4 normalize(const Vec4& v) { return v * (1 / length(v)); }
 #endif
 
 
-#if 0
+#if 1
 
 using Quat = glm::fquat;
 
 #else
 
-struct Matrix3x3;
-
 struct Quat
 {
-    float x,y,z,w;
+    float x, y, z, w;
+    Quat() : x(0), y(0), z(0), w(1) {}
+    // Quat(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
+    float &operator[](int i) { return (&x)[i]; }
+    float operator[](int i) const { return (&x)[i]; }
 
-    Quat() {}
-    Quat(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
     /*
     Quat &operator*=(float k) { return (*this = *this * k); }
 
@@ -142,35 +142,33 @@ struct Quat
 
 namespace {
 
-float length(const Quat& q) {
+float length2(const Quat& q) {
   return q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w;
 }
 
-Quat operator*(const Quat& q, float k) {
-  return Quat(q.x*k, q.y*k, q.z*k, q.w*k);
+float length(const Quat& q) {
+  return sqrtf(length2(q));
+}
+
+Quat operator*(Quat q, float k) {
+  q.x *= k;
+  q.y *= k;
+  q.z *= k;
+  q.w *= k;
+  return q;
 }
 
 Quat normalize(Quat q) { 
   return q * (1.0f / length(q));
 }
 
-void test() {
-  auto  q1 = Quat(1,2,3,4);
-  auto& q2 = *reinterpret_cast<glm::fquat*>(&q1);
-
-  printf("x: %f\n", q1.x);
-  printf("y: %f\n", q1.y);
-  printf("z: %f\n", q1.z);
-  printf("w: %f\n", q1.w);
-  printf("x: %f\n", q2.x);
-  printf("y: %f\n", q2.y);
-  printf("z: %f\n", q2.z);
-  printf("w: %f\n", q2.w);
 }
 
-}
+static_assert(sizeof(Quat) == sizeof(glm::fquat), "this needs to be equal");
 
 #endif
+
+
 
 struct Matrix3x3
 {
@@ -178,17 +176,8 @@ struct Matrix3x3
 
     Matrix3x3() {}
     Matrix3x3(const Vec3 &a, const Vec3 &b, const Vec3 &c) : a(a), b(b), c(c) {}
-    explicit Matrix3x3(const Quat &q) { convertquat(q); }
-    explicit Matrix3x3(const Quat &q, const Vec3 &scale)
-    {
-        convertquat(q);
-        a *= scale;
-        b *= scale;
-        c *= scale;
-    }
 
-    void convertquat(const Quat &q)
-    {
+    explicit Matrix3x3(const Quat &q) { 
         float x = q.x, y = q.y, z = q.z, w = q.w,
               tx = 2*x, ty = 2*y, tz = 2*z,
               txx = tx*x, tyy = ty*y, tzz = tz*z,
@@ -197,6 +186,27 @@ struct Matrix3x3
         a = Vec3(1 - (tyy + tzz), txy - twz, txz + twy);
         b = Vec3(txy + twz, 1 - (txx + tzz), tyz - twx);
         c = Vec3(txz - twy, tyz + twx, 1 - (txx + tyy));
+    }
+
+    explicit Matrix3x3(const Vec3 &scale) :
+      a(scale.x,0,0), b(0,scale.y,0), c(0,0,scale.z) {}
+
+    Matrix3x3 operator+(const Matrix3x3 &o) const { return Matrix3x3(*this) += o; }
+    Matrix3x3 &operator+=(const Matrix3x3 &o)
+    {
+        a += o.a;
+        b += o.b;
+        c += o.c;
+        return *this;
+    }
+
+    Matrix3x3 operator-(const Matrix3x3 &o) const { return Matrix3x3(*this) -= o; }
+    Matrix3x3 &operator-=(const Matrix3x3 &o)
+    {
+        a -= o.a;
+        b -= o.b;
+        c -= o.c;
+        return *this;
     }
 
     Matrix3x3 operator*(const Matrix3x3 &o) const
@@ -212,6 +222,45 @@ struct Matrix3x3
     Vec3 transposedtransform(const Vec3 &o) const { return a*o.x + b*o.y + c*o.z; }
 };
 
+inline void test() {
+  Quat q1;
+  q1.x = 1; q1.y = 2; q1.z = 3; q1.w = 4;
+  auto q2 = *reinterpret_cast<glm::fquat*>(&q1);
+  auto q3 = glm::fquat(1,2,3,4);
+
+  printf("q1.x: %f %f %f %f\n", q1.x, q1.y, q1.z, q1.w);
+  printf("q2.x: %f %f %f %f\n", q2.x, q2.y, q2.z, q2.w);
+  printf("q3.x: %f %f %f %f\n", q3.x, q3.y, q3.z, q3.w);
+
+  
+  printf("length(q1): %f\n", length(q1));
+  printf("length(q2): %f\n", length(q2));
+
+  auto n1 = normalize(q1);
+  auto n2 = normalize(q2);
+
+  printf("normalized(q1) : %0.3f %0.3f %0.3f %0.3f \n", n1.x, n1.y, n1.z, n1.w);
+  printf("normalized(q1) : %0.3f %0.3f %0.3f %0.3f \n", n2.x, n2.y, n2.z, n2.w);
+
+  Quat default1;
+  glm::fquat default2;
+
+  printf("default1.x: %f %f %f %f\n", default1.x, default1.y, default1.z, default1.w);
+  printf("default2.x: %f %f %f %f\n", default2.x, default2.y, default2.z, default2.w);
+
+  auto m1 = Matrix3x3(q1);
+  auto m2 = glm::fmat3(q2);
+
+  printf("m1:\n");
+  printf("  %f %f %f\n", m1.a.x, m1.a.y, m1.a.z);
+  printf("  %f %f %f\n", m1.b.x, m1.b.y, m1.b.z);
+  printf("  %f %f %f\n", m1.c.x, m1.c.y, m1.c.z);
+  printf("m2:\n");
+  printf("  %f %f %f\n", m2[0].x, m2[0].y, m2[0].z);
+  printf("  %f %f %f\n", m2[1].x, m2[1].y, m2[1].z);
+  printf("  %f %f %f\n", m2[2].x, m2[2].y, m2[2].z);
+}
+
 struct Matrix3x4
 {
     Vec4 a, b, c;
@@ -222,15 +271,7 @@ struct Matrix3x4
         : a(Vec4(rot.a, trans.x)), b(Vec4(rot.b, trans.y)), c(Vec4(rot.c, trans.z))
     {
     }
-    explicit Matrix3x4(const Quat &rot, const Vec3 &trans)
-    {
-        *this = Matrix3x4(Matrix3x3(rot), trans);
-    }
-    explicit Matrix3x4(const Quat &rot, const Vec3 &trans, const Vec3 &scale)
-    {
-        *this = Matrix3x4(Matrix3x3(rot, scale), trans);
-    }
-
+    
     Matrix3x4 operator*(float k) const { return Matrix3x4(*this) *= k; }
     Matrix3x4 &operator*=(float k)
     {
@@ -246,6 +287,15 @@ struct Matrix3x4
         a += o.a;
         b += o.b;
         c += o.c;
+        return *this;
+    }
+
+    Matrix3x4 operator-(const Matrix3x4 &o) const { return Matrix3x4(*this) -= o; }
+    Matrix3x4 &operator-=(const Matrix3x4 &o)
+    {
+        a -= o.a;
+        b -= o.b;
+        c -= o.c;
         return *this;
     }
 
@@ -289,4 +339,20 @@ struct Matrix3x4
       );
     }
 };
+
+void print(const Matrix3x3& m) {
+  printf("    %f %f %f\n", m.a.x, m.a.y, m.a.z);
+  printf("    %f %f %f\n", m.b.x, m.b.y, m.b.z);
+  printf("    %f %f %f\n", m.c.x, m.c.y, m.c.z);
+}
+
+void print(const Matrix3x4& m) {
+  printf("    %f %f %f %f\n", m.a.x, m.a.y, m.a.z, m.a.w);
+  printf("    %f %f %f %f\n", m.b.x, m.b.y, m.b.z, m.a.w);
+  printf("    %f %f %f %f\n", m.c.x, m.c.y, m.c.z, m.a.w);
+}
+
+void print(Quat q) {
+  printf("    %f %f %f %f\n", q[0], q[1], q[2], q[3]);
+}
 
