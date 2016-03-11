@@ -265,18 +265,18 @@ void animateiqm(float curframe) {
         // here.
        
         auto mat_a = Vec3(mat.a.x, mat.a.y, mat.a.z);
-        auto mat_b = Vec3(mat.b.x, mat.b.y, mat.c.z);
+        auto mat_b = Vec3(mat.b.x, mat.b.y, mat.b.z);
         auto mat_c = Vec3(mat.c.x, mat.c.y, mat.c.z);
-        Matrix3x3 matnorm( 
-            cross(mat_b, mat_c), 
-            cross(mat_c, mat_a), 
+        Matrix3x3 matnorm(
+            cross(mat_b, mat_c),
+            cross(mat_c, mat_a),
             cross(mat_a, mat_b)
         );
 
-        *dstnorm = matnorm.transform(*srcnorm);
+        *dstnorm = transpose(matnorm) * *srcnorm;
         // Note that input tangent data has 4 coordinates, 
         // so only transform the first 3 as the tangent vector.
-        *dsttan = matnorm.transform(Vec3(srctan->x, srctan->y, srctan->z));
+        *dsttan = transpose(matnorm) * Vec3(srctan->x, srctan->y, srctan->z);
         // Note that bitangent = cross(normal, tangent) * sign, 
         // where the sign is stored in the 4th coordinate of the input tangent data.
         *dstbitan = cross(*dstnorm, *dsttan) * srctan->w;
