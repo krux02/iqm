@@ -7,8 +7,6 @@
 #include <GL/glext.h>
 #include <GL/glut.h>
 
-#include <glm/glm.hpp>
-
 #include "util.hpp"
 #include "geom.hpp"
 #include "iqm.h"
@@ -96,7 +94,7 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf) {
         auto translate = Vec3(j.translate[0], j.translate[1], j.translate[2]);
         auto scale = Vec3(j.scale[0], j.scale[1], j.scale[2]);
         auto rotate_mat = Matrix3x3(normalize(*(Quat*)(j.rotate)));
-        baseframe[i] = Matrix3x4(rotate_mat * Matrix3x3(scale), translate);
+        baseframe[i] = transpose(Matrix4x3(rotate_mat * Matrix3x3(scale), translate));
         inversebaseframe[i].invert(baseframe[i]);
         if(j.parent >= 0)  {
             baseframe[i] = baseframe[j.parent] * baseframe[i];
@@ -165,7 +163,7 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf) {
             //   parentPose * (parentInverseBasePose * parentBasePose) * childPose * childInverseBasePose =>
             //   parentPose * childPose * childInverseBasePose
             auto rotateQuat = normalize(*(Quat*)(rotate));
-            auto m = Matrix3x4(Matrix3x3(rotateQuat) * Matrix3x3(scale), translate);
+            auto m = transpose(Matrix4x3(Matrix3x3(rotateQuat) * Matrix3x3(scale), translate));
             if(p.parent >= 0) frames[i*hdr.num_poses + j] = baseframe[p.parent] * m * inversebaseframe[j];
             else frames[i*hdr.num_poses + j] = m * inversebaseframe[j];
         }
@@ -441,7 +439,7 @@ int32_t main(int argc, char **argv) {
     for(int32_t i = 1; i < argc; i++) {
         if(argv[i][0] == '-') switch(argv[i][1]) {
         case 's':
-            if(i + 1 < argc) scale = glm::clamp(atof(argv[++i]), 1e-8, 1e8);
+            if(i + 1 < argc) scale = clamp(atof(argv[++i]), 1e-8, 1e8);
             break;
         case 'r':
             if(i + 1 < argc) rotate = atof(argv[++i]);

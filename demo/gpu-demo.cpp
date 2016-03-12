@@ -180,7 +180,7 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
         auto translate = Vec3(j.translate[0], j.translate[1], j.translate[2]);
         auto scale = Vec3(j.scale[0], j.scale[1], j.scale[2]);
         auto rotate = normalize(*(Quat*)(j.rotate));
-        baseframe[i] = Matrix3x4(Matrix3x3(rotate) * Matrix3x3(scale), translate);
+        baseframe[i] = transpose( Matrix4x3(Matrix3x3(rotate) * Matrix3x3(scale), translate) );
         inversebaseframe[i].invert(baseframe[i]);
         if(j.parent >= 0) 
         {
@@ -279,7 +279,7 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
             //   (parentPose * parentInverseBasePose) * (parentBasePose * childPose * childInverseBasePose) =>
             //   parentPose * (parentInverseBasePose * parentBasePose) * childPose * childInverseBasePose =>
             //   parentPose * childPose * childInverseBasePose
-            Matrix3x4 m( Matrix3x3(normalize(rotate)) * Matrix3x3(scale), translate);
+            Matrix3x4 m = transpose( Matrix4x3( Matrix3x3(normalize(rotate)) * Matrix3x3(scale), translate));
             if(p.parent >= 0) frames[i*hdr.num_poses + j] = baseframe[p.parent] * m * inversebaseframe[j];
             else frames[i*hdr.num_poses + j] = m * inversebaseframe[j];
         }
@@ -723,7 +723,7 @@ int main(int argc, char **argv)
         if(argv[i][0] == '-') switch(argv[i][1])
         {
         case 's':
-            if(i + 1 < argc) scale = glm::clamp(atof(argv[++i]), 1e-8, 1e8);
+            if(i + 1 < argc) scale = clamp(atof(argv[++i]), 1e-8, 1e8);
             break;
         case 'r':
             if(i + 1 < argc) rotate = atof(argv[++i]);

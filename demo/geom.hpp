@@ -3,14 +3,18 @@
 #include <cmath>
 #include <algorithm>
 
+
+#if 1
+
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
-#if 1
-
 using Vec3 = glm::fvec3;
 using Vec4 = glm::fvec4;
+using Quat = glm::fquat;
+
+using glm::clamp;
 
 #else
 
@@ -81,6 +85,10 @@ struct Vec4
 
 namespace {
 
+inline float clamp(float x, float lower, float upper) {
+  return std::min(std::max(x, lower), upper);
+}
+
 inline float dot(const Vec3& v1, const Vec3& v2) {
   return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
 }
@@ -103,15 +111,6 @@ inline Vec4 normalize(const Vec4& v) { return v * (1 / length(v)); }
 // Vec3 project(const Vec3& v, const Vec3 &n) { return v - n*dot(v, n); }
 
 }
-
-#endif
-
-
-#if 1
-
-using Quat = glm::fquat;
-
-#else
 
 struct Quat
 {
@@ -167,6 +166,10 @@ Quat normalize(Quat q) {
 #endif
 
 
+struct Matrix3x3;
+
+void print(const Matrix3x3&);
+void print(const glm::fmat3&);
 
 struct Matrix3x3
 {
@@ -181,9 +184,9 @@ struct Matrix3x3
               txx = tx*x, tyy = ty*y, tzz = tz*z,
               txy = tx*y, txz = tx*z, tyz = ty*z,
               twx = w*tx, twy = w*ty, twz = w*tz;
-        a = Vec3(1 - (tyy + tzz), txy - twz, txz + twy);
-        b = Vec3(txy + twz, 1 - (txx + tzz), tyz - twx);
-        c = Vec3(txz - twy, tyz + twx, 1 - (txx + tyy));
+        a = Vec3(1 - (tyy + tzz),      txy + twz ,      txz - twy);
+        b = Vec3(     txy - twz , 1 - (txx + tzz),      tyz + twx);
+        c = Vec3(     txz + twy ,      tyz - twx , 1 - (txx + tyy));
     }
 
     explicit Matrix3x3(const Vec3 &scale) :
@@ -218,6 +221,119 @@ struct Matrix3x3
 };
 
 
+
+struct Matrix4x3
+{
+    Vec3 a, b, c, d;
+    
+    Matrix4x3(const Vec3 &a, const Vec3 &b, const Vec3 &c, const Vec3 &d) : a(a), b(b), c(c), d(d) {}
+    explicit Matrix4x3(const Matrix3x3 &rot, const Vec3 &trans)
+        : a(rot.a), b(rot.b), c(rot.c), d(trans) {}
+};
+
+struct Matrix4x4
+{
+    Vec4 a, b, c, d;
+
+    Matrix4x4(const Vec4 &a, const Vec4 &b, const Vec4 &c, const Vec4 &d) : a(a), b(b), c(c), d(d) {}
+    explicit Matrix4x4(const Matrix3x3 &rot, const Vec3 &trans)
+        : a(rot.a,0), b(rot.b,0), c(rot.c,0), d(trans,1) {}
+};
+
+struct Matrix3x4
+{
+    Vec4 a, b, c;
+
+    Matrix3x4() {}
+    Matrix3x4(const Vec4 &a, const Vec4 &b, const Vec4 &c) : a(a), b(b), c(c) {}
+    
+    Matrix3x4 operator*(float k) const { return Matrix3x4(*this) *= k; }
+    Matrix3x4 &operator*=(float k)
+    {
+        a *= k;
+        b *= k;
+        c *= k;
+        return *this;
+    }
+
+    Matrix3x4 operator+(const Matrix3x4 &o) const { return Matrix3x4(*this) += o; }
+    Matrix3x4 &operator+=(const Matrix3x4 &o)
+    {
+        a += o.a;
+        b += o.b;
+        c += o.c;
+        return *this;
+    }
+
+    Matrix3x4 operator-(const Matrix3x4 &o) const { return Matrix3x4(*this) -= o; }
+    Matrix3x4 &operator-=(const Matrix3x4 &o)
+    {
+        a -= o.a;
+        b -= o.b;
+        c -= o.c;
+        return *this;
+    }
+
+    void invert(const Matrix3x4 &o)
+    {
+        Matrix3x3 invrot(Vec3(o.a.x, o.b.x, o.c.x), Vec3(o.a.y, o.b.y, o.c.y), Vec3(o.a.z, o.b.z, o.c.z));
+        invrot.a /= length2(invrot.a);
+        invrot.b /= length2(invrot.b);
+        invrot.c /= length2(invrot.c);
+        Vec3 trans(o.a.w, o.b.w, o.c.w);
+        a = Vec4(invrot.a, -dot(invrot.a, trans));
+        b = Vec4(invrot.b, -dot(invrot.b, trans));
+        c = Vec4(invrot.c, -dot(invrot.c, trans));
+    }
+
+    void invert() { invert(Matrix3x4(*this)); }
+
+    Matrix3x4 operator*(const Matrix3x4 &o) const
+    {
+        return Matrix3x4(
+          o.a*a.x + o.b*a.y + o.c*a.z + Vec4(0,0,0,a.w),
+          o.a*b.x + o.b*b.y + o.c*b.z + Vec4(0,0,0,b.w),
+          o.a*c.x + o.b*c.y + o.c*c.z + Vec4(0,0,0,c.w)
+        );
+    }
+
+    Matrix3x4 &operator*=(const Matrix3x4 &o) { return (*this = *this * o); }
+};
+
+inline Matrix3x3 transpose(const Matrix3x3& mat) {
+  return Matrix3x3(
+    Vec3(mat.a.x, mat.b.x, mat.c.x), 
+    Vec3(mat.a.y, mat.b.y, mat.c.y),
+    Vec3(mat.a.z, mat.b.z, mat.c.z)
+  );
+}
+
+
+inline Matrix4x3 transpose(const Matrix3x4& mat) {
+  return Matrix4x3(
+    Vec3(mat.a.x, mat.b.x, mat.c.x),
+    Vec3(mat.a.y, mat.b.y, mat.c.y),
+    Vec3(mat.a.z, mat.b.z, mat.c.z),
+    Vec3(mat.a.w, mat.b.w, mat.c.w)
+  );
+}
+
+inline Matrix3x4 transpose(const Matrix4x3& mat) {
+  return Matrix3x4(
+    Vec4(mat.a.x, mat.b.x, mat.c.x, mat.d.x),
+    Vec4(mat.a.y, mat.b.y, mat.c.y, mat.d.y),
+    Vec4(mat.a.z, mat.b.z, mat.c.z, mat.d.z)
+  );
+}
+
+inline Matrix4x4 transpose(const Matrix4x4& mat) {
+  return Matrix4x4(
+    Vec4(mat.a.x, mat.b.x, mat.c.x, mat.d.x),
+    Vec4(mat.a.y, mat.b.y, mat.c.y, mat.d.y),
+    Vec4(mat.a.z, mat.b.z, mat.c.z, mat.d.z),
+    Vec4(mat.a.w, mat.b.w, mat.c.w, mat.d.w)
+  );
+}
 #if 0
 inline void test() {
   Quat q1;
@@ -259,117 +375,28 @@ inline void test() {
 }
 #endif
 
-struct Matrix4x3
-{
-    Vec3 a, b, c, d;
-    
-    Matrix4x3(const Vec3 &a, const Vec3 &b, const Vec3 &c, const Vec3 &d) : a(a), b(b), c(c), d(d) {}
-    explicit Matrix4x3(const Matrix3x3 &rot, const Vec3 &trans)
-        : a(rot.a), b(rot.b), c(rot.c), d(trans) {}
-};
-
-struct Matrix3x4
-{
-    Vec4 a, b, c;
-
-    Matrix3x4() {}
-    Matrix3x4(const Vec4 &a, const Vec4 &b, const Vec4 &c) : a(a), b(b), c(c) {}
-    
-    explicit Matrix3x4(const Matrix3x3 &rot, const Vec3 &trans)
-        : a(Vec4(rot.a, trans.x)), b(Vec4(rot.b, trans.y)), c(Vec4(rot.c, trans.z)) {}
-
-    Matrix3x4 operator*(float k) const { return Matrix3x4(*this) *= k; }
-    Matrix3x4 &operator*=(float k)
-    {
-        a *= k;
-        b *= k;
-        c *= k;
-        return *this;
-    }
-
-    Matrix3x4 operator+(const Matrix3x4 &o) const { return Matrix3x4(*this) += o; }
-    Matrix3x4 &operator+=(const Matrix3x4 &o)
-    {
-        a += o.a;
-        b += o.b;
-        c += o.c;
-        return *this;
-    }
-
-    Matrix3x4 operator-(const Matrix3x4 &o) const { return Matrix3x4(*this) -= o; }
-    Matrix3x4 &operator-=(const Matrix3x4 &o)
-    {
-        a -= o.a;
-        b -= o.b;
-        c -= o.c;
-        return *this;
-    }
-
-    void invert(const Matrix3x4 &o)
-    {
-        Matrix3x3 invrot(Vec3(o.a.x, o.b.x, o.c.x), Vec3(o.a.y, o.b.y, o.c.y), Vec3(o.a.z, o.b.z, o.c.z));
-        invrot.a /= length2(invrot.a);
-        invrot.b /= length2(invrot.b);
-        invrot.c /= length2(invrot.c);
-        Vec3 trans(o.a.w, o.b.w, o.c.w);
-        a = Vec4(invrot.a, -dot(invrot.a, trans));
-        b = Vec4(invrot.b, -dot(invrot.b, trans));
-        c = Vec4(invrot.c, -dot(invrot.c, trans));
-    }
-    void invert() { invert(Matrix3x4(*this)); }
-
-    Matrix3x4 operator*(const Matrix3x4 &o) const
-    {
-        return Matrix3x4(
-          o.a*a.x + o.b*a.y + o.c*a.z + Vec4(0,0,0,a.w),
-          o.a*b.x + o.b*b.y + o.c*b.z + Vec4(0,0,0,b.w),
-          o.a*c.x + o.b*c.y + o.c*c.z + Vec4(0,0,0,c.w)
-        );
-    }
-
-    Matrix3x4 &operator*=(const Matrix3x4 &o) { return (*this = *this * o); }
-};
-
-namespace {
-  
-inline Matrix3x3 transpose(const Matrix3x3& mat) {
-  return Matrix3x3(
-    Vec3(mat.a.x, mat.b.x, mat.c.x), 
-    Vec3(mat.a.y, mat.b.y, mat.c.y),
-    Vec3(mat.a.z, mat.b.z, mat.c.z)
-  );
-}
-
-
-inline Matrix4x3 transpose(const Matrix3x4& mat) {
-  return Matrix4x3(
-    Vec3(mat.a.x, mat.b.x, mat.c.x),
-    Vec3(mat.a.y, mat.b.y, mat.c.y),
-    Vec3(mat.a.z, mat.b.z, mat.c.z),
-    Vec3(mat.a.w, mat.b.w, mat.c.w)
-  );
-}
-
-inline Matrix3x4 transpose(const Matrix4x3& mat) {
-  return Matrix3x4(
-    Vec4(mat.a.x, mat.b.x, mat.c.x, mat.d.x),
-    Vec4(mat.a.y, mat.b.y, mat.c.y, mat.d.y),
-    Vec4(mat.a.z, mat.b.z, mat.c.z, mat.d.z)
-  );
+inline Vec4 operator*(const Matrix4x4& mat, const Vec4& v) {
+  return mat.a * v.x + mat.b * v.y + mat.c * v.z + mat.d * v.w;
 }
 
 inline Vec3 operator*(const Matrix4x3& mat, const Vec4& v) {
-  return Vec3( mat.a * v.x + mat.b * v.y + mat.c * v.z + mat.d * v.w );
+  return mat.a * v.x + mat.b * v.y + mat.c * v.z + mat.d * v.w;
 }
 
 inline Vec3 operator*(const Matrix3x3& mat, const Vec3& v) {
-  return Vec3( mat.a * v.x + mat.b * v.y + mat.c * v.z );
+  return mat.a * v.x + mat.b * v.y + mat.c * v.z;
 }
 
-inline void print(const Matrix3x3& m) {
+ void print(const Matrix3x3& m) {
   printf("    %f %f %f\n", m.a.x, m.b.x, m.c.x);
   printf("    %f %f %f\n", m.a.y, m.b.y, m.c.y);
   printf("    %f %f %f\n", m.a.z, m.b.z, m.c.z);
+}
+
+inline void print(const glm::fmat3& m) {
+  printf("    %f %f %f\n", m[0].x, m[1].x, m[2].x);
+  printf("    %f %f %f\n", m[0].y, m[1].y, m[2].y);
+  printf("    %f %f %f\n", m[0].z, m[1].z, m[2].z);
 }
 
 inline void print(const Matrix3x4& m) {
@@ -385,6 +412,13 @@ inline void print(const Matrix4x3& m) {
   printf("    %f %f %f %f\n", m.a.z, m.b.z, m.c.z, m.d.z);
 }
 
+inline void print(const Matrix4x4& m) {
+  printf("    %f %f %f %f\n", m.a.x, m.b.x, m.c.x, m.d.x);
+  printf("    %f %f %f %f\n", m.a.y, m.b.y, m.c.y, m.d.y);
+  printf("    %f %f %f %f\n", m.a.z, m.b.z, m.c.z, m.d.z);
+  printf("    %f %f %f %f\n", m.a.w, m.b.w, m.c.w, m.d.w);
+}
+
 inline void print(Quat q) {
   printf("    %f %f %f %f\n", q[0], q[1], q[2], q[3]);
 }
@@ -397,4 +431,3 @@ inline void print(Vec3 q) {
   printf("    %f %f %f\n", q[0], q[1], q[2]);
 }
 
-}
