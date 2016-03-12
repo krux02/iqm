@@ -165,8 +165,10 @@ Quat normalize(Quat q) {
 
 #endif
 
-
 struct Matrix3x3;
+struct Matrix4x3;
+struct Matrix3x4;
+struct Matrix4x4;
 
 void print(const Matrix3x3&);
 void print(const glm::fmat3&);
@@ -177,6 +179,8 @@ struct Matrix3x3
 
     Matrix3x3() {}
     Matrix3x3(const Vec3 &a, const Vec3 &b, const Vec3 &c) : a(a), b(b), c(c) {}
+    Matrix3x3(const Matrix4x3& m);
+    Matrix3x3(const Matrix3x4& m);
 
     explicit Matrix3x3(const Quat &q) { 
         float x = q.x, y = q.y, z = q.z, w = q.w,
@@ -274,17 +278,8 @@ struct Matrix3x4
         return *this;
     }
 
-    void invert(const Matrix3x4 &o)
-    {
-        Matrix3x3 invrot(Vec3(o.a.x, o.b.x, o.c.x), Vec3(o.a.y, o.b.y, o.c.y), Vec3(o.a.z, o.b.z, o.c.z));
-        invrot.a /= length2(invrot.a);
-        invrot.b /= length2(invrot.b);
-        invrot.c /= length2(invrot.c);
-        Vec3 trans(o.a.w, o.b.w, o.c.w);
-        a = Vec4(invrot.a, -dot(invrot.a, trans));
-        b = Vec4(invrot.b, -dot(invrot.b, trans));
-        c = Vec4(invrot.c, -dot(invrot.c, trans));
-    }
+    void invert(const Matrix3x4 &o);
+    
 
     void invert() { invert(Matrix3x4(*this)); }
 
@@ -299,6 +294,9 @@ struct Matrix3x4
 
     Matrix3x4 &operator*=(const Matrix3x4 &o) { return (*this = *this * o); }
 };
+
+Matrix3x3::Matrix3x3(const Matrix4x3& m) : a(m.a), b(m.b), c(m.c) {}
+Matrix3x3::Matrix3x3(const Matrix3x4& m) : a(m.a), b(m.b), c(m.c) {}
 
 inline Matrix3x3 transpose(const Matrix3x3& mat) {
   return Matrix3x3(
@@ -334,6 +332,8 @@ inline Matrix4x4 transpose(const Matrix4x4& mat) {
     Vec4(mat.a.w, mat.b.w, mat.c.w, mat.d.w)
   );
 }
+
+
 #if 0
 inline void test() {
   Quat q1;
@@ -385,6 +385,20 @@ inline Vec3 operator*(const Matrix4x3& mat, const Vec4& v) {
 
 inline Vec3 operator*(const Matrix3x3& mat, const Vec3& v) {
   return mat.a * v.x + mat.b * v.y + mat.c * v.z;
+}
+
+
+Matrix4x3 invert(const Matrix4x3& mat) {
+    Matrix3x3 invrot = Matrix3x3(mat);
+    invrot.a /= length2(invrot.a);
+    invrot.b /= length2(invrot.b);
+    invrot.c /= length2(invrot.c);
+    Vec3 trans = -(transpose(invrot) * mat.d);
+    return Matrix4x3(transpose(invrot), trans);
+}
+
+void Matrix3x4::invert(const Matrix3x4 &o) {
+    *this = transpose(::invert(transpose(o)));
 }
 
  void print(const Matrix3x3& m) {
