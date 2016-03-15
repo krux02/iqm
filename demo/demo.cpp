@@ -94,8 +94,9 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf) {
         auto translate = Vec3(j.translate[0], j.translate[1], j.translate[2]);
         auto scale = Vec3(j.scale[0], j.scale[1], j.scale[2]);
         auto rotate_mat = Matrix3x3(normalize(*(Quat*)(j.rotate)));
-        baseframe[i] = transpose(Matrix4x3(rotate_mat * Matrix3x3(scale), translate));
-        inversebaseframe[i].invert(baseframe[i]);
+        auto scalerot_mat = rotate_mat * diagonal3x3(scale);
+        baseframe[i] = transpose(Matrix4x3(scalerot_mat[0], scalerot_mat[1], scalerot_mat[2], translate));
+        inversebaseframe[i] = invert(baseframe[i]);
         if(j.parent >= 0)  {
             baseframe[i] = baseframe[j.parent] * baseframe[i];
             inversebaseframe[i] *= inversebaseframe[j.parent];
@@ -163,7 +164,8 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf) {
             //   parentPose * (parentInverseBasePose * parentBasePose) * childPose * childInverseBasePose =>
             //   parentPose * childPose * childInverseBasePose
             auto rotateQuat = normalize(*(Quat*)(rotate));
-            auto m = transpose(Matrix4x3(Matrix3x3(rotateQuat) * Matrix3x3(scale), translate));
+            auto scalerot_mat = Matrix3x3(rotateQuat) * diagonal3x3(scale);
+            auto m = transpose(Matrix4x3(scalerot_mat[0], scalerot_mat[1], scalerot_mat[2], translate));
             if(p.parent >= 0) frames[i*hdr.num_poses + j] = baseframe[p.parent] * m * inversebaseframe[j];
             else frames[i*hdr.num_poses + j] = m * inversebaseframe[j];
         }
@@ -262,9 +264,9 @@ void animateiqm(float curframe) {
         // upper 3x3 part of the position matrix instead of the adjoint-transpose shown 
         // here.
        
-        auto mat_a = Vec3(mat.a.x, mat.a.y, mat.a.z);
-        auto mat_b = Vec3(mat.b.x, mat.b.y, mat.b.z);
-        auto mat_c = Vec3(mat.c.x, mat.c.y, mat.c.z);
+        auto mat_a = Vec3(mat[0].x, mat[0].y, mat[0].z);
+        auto mat_b = Vec3(mat[1].x, mat[1].y, mat[1].z);
+        auto mat_c = Vec3(mat[2].x, mat[2].y, mat[2].z);
         Matrix3x3 matnorm(
             cross(mat_b, mat_c),
             cross(mat_c, mat_a),

@@ -4,17 +4,23 @@
 #include <algorithm>
 
 
-#if 1
+#if 0
 
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/matrix_operation.hpp>
 
 using Vec3 = glm::fvec3;
 using Vec4 = glm::fvec4;
 using Quat = glm::fquat;
 
 using glm::clamp;
+
+using Matrix3x3 = glm::fmat3x3;
+using Matrix3x4 = glm::fmat3x4;
+using Matrix4x3 = glm::fmat4x3;
+using Matrix4x4 = glm::fmat4x4;
 
 #else
 
@@ -27,8 +33,8 @@ struct Vec3
     Vec3() {}
     Vec3(float x, float y, float z) : x(x), y(y), z(z) {}
 
-    float &operator[](int i) { return (&x)[i]; }
-    float operator[](int i) const { return (&x)[i]; }
+    float &operator[](long i) { return (&x)[i]; }
+    float operator[](long i) const { return (&x)[i]; }
 
     bool operator==(const Vec3 &o) const { return x == o.x && y == o.y && z == o.z; }
     bool operator!=(const Vec3 &o) const { return x != o.x || y != o.y || z != o.z; }
@@ -61,8 +67,8 @@ struct Vec4
     Vec4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
     explicit Vec4(const Vec3 &p, float w = 0) : x(p.x), y(p.y), z(p.z), w(w) {}
 
-    float &operator[](int i)       { return (&x)[i]; }
-    float  operator[](int i) const { return (&x)[i]; }
+    float &operator[](long i)       { return (&x)[i]; }
+    float  operator[](long i) const { return (&x)[i]; }
 
     bool operator==(const Vec4 &o) const { return x == o.x && y == o.y && z == o.z && w == o.w; }
     bool operator!=(const Vec4 &o) const { return x != o.x || y != o.y || z != o.z || w != o.w; }
@@ -117,8 +123,8 @@ struct Quat
     float x, y, z, w;
     Quat() : x(0), y(0), z(0), w(1) {}
     Quat(float w, float x, float y, float z) : x(x), y(y), z(z), w(w) {}
-    float &operator[](int i) { return (&x)[i]; }
-    float operator[](int i) const { return (&x)[i]; }
+    float &operator[](long i) { return (&x)[i]; }
+    float operator[](long i) const { return (&x)[i]; }
 
     /*
     Quat &operator*=(float k) { return (*this = *this * k); }
@@ -163,15 +169,12 @@ Quat normalize(Quat q) {
 
 }
 
-#endif
-
 struct Matrix3x3;
 struct Matrix4x3;
 struct Matrix3x4;
 struct Matrix4x4;
 
 void print(const Matrix3x3&);
-void print(const glm::fmat3&);
 
 struct Matrix3x3
 {
@@ -179,8 +182,12 @@ struct Matrix3x3
 
     Matrix3x3() {}
     Matrix3x3(const Vec3 &a, const Vec3 &b, const Vec3 &c) : a(a), b(b), c(c) {}
-    Matrix3x3(const Matrix4x3& m);
-    Matrix3x3(const Matrix3x4& m);
+
+    Vec3& operator[](long i) { return (&a)[i]; }
+    Vec3 operator[](long i) const { return (&a)[i]; }
+
+    explicit Matrix3x3(const Matrix4x3& m);
+    explicit Matrix3x3(const Matrix3x4& m);
 
     explicit Matrix3x3(const Quat &q) { 
         float x = q.x, y = q.y, z = q.z, w = q.w,
@@ -193,8 +200,6 @@ struct Matrix3x3
         c = Vec3(     txz + twy ,      tyz - twx , 1 - (txx + tyy));
     }
 
-    explicit Matrix3x3(const Vec3 &scale) :
-      a(scale.x,0,0), b(0,scale.y,0), c(0,0,scale.z) {}
 
     Matrix3x3 operator+(const Matrix3x3 &o) const { return Matrix3x3(*this) += o; }
     Matrix3x3 &operator+=(const Matrix3x3 &o)
@@ -233,6 +238,9 @@ struct Matrix4x3
     Matrix4x3(const Vec3 &a, const Vec3 &b, const Vec3 &c, const Vec3 &d) : a(a), b(b), c(c), d(d) {}
     explicit Matrix4x3(const Matrix3x3 &rot, const Vec3 &trans)
         : a(rot.a), b(rot.b), c(rot.c), d(trans) {}
+
+    Vec3& operator[](long i) { return (&a)[i]; }
+    Vec3 operator[](long i) const { return (&a)[i]; }
 };
 
 struct Matrix4x4
@@ -242,6 +250,9 @@ struct Matrix4x4
     Matrix4x4(const Vec4 &a, const Vec4 &b, const Vec4 &c, const Vec4 &d) : a(a), b(b), c(c), d(d) {}
     explicit Matrix4x4(const Matrix3x3 &rot, const Vec3 &trans)
         : a(rot.a,0), b(rot.b,0), c(rot.c,0), d(trans,1) {}
+
+    Vec4& operator[](long i) { return (&a)[i]; }
+    Vec4 operator[](long i) const { return (&a)[i]; }
 };
 
 struct Matrix3x4
@@ -251,6 +262,9 @@ struct Matrix3x4
     Matrix3x4() {}
     Matrix3x4(const Vec4 &a, const Vec4 &b, const Vec4 &c) : a(a), b(b), c(c) {}
     
+    Vec4& operator[](long i) { return (&a)[i]; }
+    Vec4 operator[](long i) const { return (&a)[i]; }
+
     Matrix3x4 operator*(float k) const { return Matrix3x4(*this) *= k; }
     Matrix3x4 &operator*=(float k)
     {
@@ -278,10 +292,6 @@ struct Matrix3x4
         return *this;
     }
 
-    void invert(const Matrix3x4 &o);
-    
-
-    void invert() { invert(Matrix3x4(*this)); }
 
     Matrix3x4 operator*(const Matrix3x4 &o) const
     {
@@ -296,7 +306,7 @@ struct Matrix3x4
 };
 
 Matrix3x3::Matrix3x3(const Matrix4x3& m) : a(m.a), b(m.b), c(m.c) {}
-Matrix3x3::Matrix3x3(const Matrix3x4& m) : a(m.a), b(m.b), c(m.c) {}
+Matrix3x3::Matrix3x3(const Matrix3x4& m) : a(m.a.x, m.a.y, m.a.z), b(m.b.x, m.b.y, m.b.z), c(m.c.x, m.c.y, m.c.z) {}
 
 inline Matrix3x3 transpose(const Matrix3x3& mat) {
   return Matrix3x3(
@@ -333,6 +343,86 @@ inline Matrix4x4 transpose(const Matrix4x4& mat) {
   );
 }
 
+inline Matrix3x3 diagonal3x3(const Vec3& scale) {
+   return Matrix3x3(Vec3(scale.x,0,0), Vec3(0,scale.y,0), Vec3(0,0,scale.z));
+}
+
+inline Vec4 operator*(const Matrix4x4& mat, const Vec4& v) {
+  return mat.a * v.x + mat.b * v.y + mat.c * v.z + mat.d * v.w;
+}
+
+inline Vec3 operator*(const Matrix4x3& mat, const Vec4& v) {
+  return mat.a * v.x + mat.b * v.y + mat.c * v.z + mat.d * v.w;
+}
+
+inline Vec3 operator*(const Matrix3x3& mat, const Vec3& v) {
+  return mat.a * v.x + mat.b * v.y + mat.c * v.z;
+}
+
+#endif
+
+Matrix3x3 invertRotation(Matrix3x3 mat) {
+    mat[0] /= length2(mat[0]);
+    mat[1] /= length2(mat[1]);
+    mat[2] /= length2(mat[2]);
+    return transpose(mat);
+}
+
+Matrix4x3 invert(const Matrix4x3& mat) {
+    Matrix3x3 invrot = invertRotation(Matrix3x3(mat));
+    Vec3 trans = -(invrot * mat[3]);
+    return Matrix4x3(invrot[0], invrot[1], invrot[2], trans);
+}
+
+Matrix3x4 invert(const Matrix3x4 &o) {
+    return transpose(invert(transpose(o)));
+}
+
+ void print(const Matrix3x3& m) {
+  printf("    %f %f %f\n", m[0].x, m[1].x, m[2].x);
+  printf("    %f %f %f\n", m[0].y, m[1].y, m[2].y);
+  printf("    %f %f %f\n", m[0].z, m[1].z, m[2].z);
+}
+
+/*
+inline void print(const glm::fmat3& m) {
+  printf("    %f %f %f\n", m[0].x, m[1].x, m[2].x);
+  printf("    %f %f %f\n", m[0].y, m[1].y, m[2].y);
+  printf("    %f %f %f\n", m[0].z, m[1].z, m[2].z);
+}
+*/
+
+inline void print(const Matrix3x4& m) {
+  printf("    %f %f %f\n", m[0].x, m[1].x, m[2].x);
+  printf("    %f %f %f\n", m[0].y, m[1].y, m[2].y);
+  printf("    %f %f %f\n", m[0].z, m[1].z, m[2].z);
+  printf("    %f %f %f\n", m[0].w, m[1].w, m[2].w);
+}
+
+inline void print(const Matrix4x3& m) {
+  printf("    %f %f %f %f\n", m[0].x, m[1].x, m[2].x, m[3].x);
+  printf("    %f %f %f %f\n", m[0].y, m[1].y, m[2].y, m[3].y);
+  printf("    %f %f %f %f\n", m[0].z, m[1].z, m[2].z, m[3].z);
+}
+
+inline void print(const Matrix4x4& m) {
+  printf("    %f %f %f %f\n", m[0].x, m[1].x, m[2].x, m[3].x);
+  printf("    %f %f %f %f\n", m[0].y, m[1].y, m[2].y, m[3].y);
+  printf("    %f %f %f %f\n", m[0].z, m[1].z, m[2].z, m[3].z);
+  printf("    %f %f %f %f\n", m[0].w, m[1].w, m[2].w, m[3].w);
+}
+
+inline void print(Quat q) {
+  printf("    %f %f %f %f\n", q[0], q[1], q[2], q[3]);
+}
+
+inline void print(Vec4 q) {
+  printf("    %f %f %f %f\n", q[0], q[1], q[2], q[3]);
+}
+
+inline void print(Vec3 q) {
+  printf("    %f %f %f\n", q[0], q[1], q[2]);
+}
 
 #if 0
 inline void test() {
@@ -374,74 +464,3 @@ inline void test() {
   printf("  %f %f %f\n", m2[2].x, m2[2].y, m2[2].z);
 }
 #endif
-
-inline Vec4 operator*(const Matrix4x4& mat, const Vec4& v) {
-  return mat.a * v.x + mat.b * v.y + mat.c * v.z + mat.d * v.w;
-}
-
-inline Vec3 operator*(const Matrix4x3& mat, const Vec4& v) {
-  return mat.a * v.x + mat.b * v.y + mat.c * v.z + mat.d * v.w;
-}
-
-inline Vec3 operator*(const Matrix3x3& mat, const Vec3& v) {
-  return mat.a * v.x + mat.b * v.y + mat.c * v.z;
-}
-
-
-Matrix4x3 invert(const Matrix4x3& mat) {
-    Matrix3x3 invrot = Matrix3x3(mat);
-    invrot.a /= length2(invrot.a);
-    invrot.b /= length2(invrot.b);
-    invrot.c /= length2(invrot.c);
-    Vec3 trans = -(transpose(invrot) * mat.d);
-    return Matrix4x3(transpose(invrot), trans);
-}
-
-void Matrix3x4::invert(const Matrix3x4 &o) {
-    *this = transpose(::invert(transpose(o)));
-}
-
- void print(const Matrix3x3& m) {
-  printf("    %f %f %f\n", m.a.x, m.b.x, m.c.x);
-  printf("    %f %f %f\n", m.a.y, m.b.y, m.c.y);
-  printf("    %f %f %f\n", m.a.z, m.b.z, m.c.z);
-}
-
-inline void print(const glm::fmat3& m) {
-  printf("    %f %f %f\n", m[0].x, m[1].x, m[2].x);
-  printf("    %f %f %f\n", m[0].y, m[1].y, m[2].y);
-  printf("    %f %f %f\n", m[0].z, m[1].z, m[2].z);
-}
-
-inline void print(const Matrix3x4& m) {
-  printf("    %f %f %f\n", m.a.x, m.b.x, m.c.x);
-  printf("    %f %f %f\n", m.a.y, m.b.y, m.c.y);
-  printf("    %f %f %f\n", m.a.z, m.b.z, m.c.z);
-  printf("    %f %f %f\n", m.a.w, m.b.w, m.c.w);
-}
-
-inline void print(const Matrix4x3& m) {
-  printf("    %f %f %f %f\n", m.a.x, m.b.x, m.c.x, m.d.x);
-  printf("    %f %f %f %f\n", m.a.y, m.b.y, m.c.y, m.d.y);
-  printf("    %f %f %f %f\n", m.a.z, m.b.z, m.c.z, m.d.z);
-}
-
-inline void print(const Matrix4x4& m) {
-  printf("    %f %f %f %f\n", m.a.x, m.b.x, m.c.x, m.d.x);
-  printf("    %f %f %f %f\n", m.a.y, m.b.y, m.c.y, m.d.y);
-  printf("    %f %f %f %f\n", m.a.z, m.b.z, m.c.z, m.d.z);
-  printf("    %f %f %f %f\n", m.a.w, m.b.w, m.c.w, m.d.w);
-}
-
-inline void print(Quat q) {
-  printf("    %f %f %f %f\n", q[0], q[1], q[2], q[3]);
-}
-
-inline void print(Vec4 q) {
-  printf("    %f %f %f %f\n", q[0], q[1], q[2], q[3]);
-}
-
-inline void print(Vec3 q) {
-  printf("    %f %f %f\n", q[0], q[1], q[2]);
-}
-
