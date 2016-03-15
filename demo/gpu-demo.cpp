@@ -33,7 +33,7 @@
     EXT(PFNGLDISABLEVERTEXATTRIBARRAYPROC, glDisableVertexAttribArray, true) \
     EXT(PFNGLENABLEVERTEXATTRIBARRAYPROC, glEnableVertexAttribArray, true) \
     EXT(PFNGLVERTEXATTRIBPOINTERPROC, glVertexAttribPointer, true) \
-    EXT(PFNGLUNIFORMMATRIX3X4FVPROC, glUniformMatrix3x4fv, true) \
+    EXT(PFNGLUNIFORMMATRIX4FVPROC, glUniformMatrix4fv, true) \
     EXT(PFNGLUNIFORM1IPROC, glUniform1i, true) \
     EXT(PFNGLGETUNIFORMLOCATIONPROC, glGetUniformLocation, true) \
     EXT(PFNGLBINDBUFFERPROC, glBindBuffer, true) \
@@ -89,7 +89,7 @@ GLuint notexture = 0;
 iqmjoint *joints = nullptr;
 iqmpose *poses = nullptr;
 iqmanim *anims = nullptr;
-Matrix3x4 *baseframe = nullptr, *inversebaseframe = nullptr, *outframe = nullptr, *frames = nullptr;
+Matrix4x4 *baseframe = nullptr, *inversebaseframe = nullptr, *outframe = nullptr, *frames = nullptr;
 
 struct vertex
 {
@@ -135,7 +135,7 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
     numtris = hdr.num_triangles;
     numverts = hdr.num_vertexes;
     numjoints = hdr.num_joints;
-    outframe = new Matrix3x4[hdr.num_joints];
+    outframe = new Matrix4x4[hdr.num_joints];
     textures = new GLuint[nummeshes];
     memset(textures, 0, nummeshes*sizeof(GLuint));
 
@@ -172,8 +172,8 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
     meshes = (iqmmesh *)&buf[hdr.ofs_meshes];
     joints = (iqmjoint *)&buf[hdr.ofs_joints];
 
-    baseframe = new Matrix3x4[hdr.num_joints];
-    inversebaseframe = new Matrix3x4[hdr.num_joints];
+    baseframe = new Matrix4x4[hdr.num_joints];
+    inversebaseframe = new Matrix4x4[hdr.num_joints];
     for(int i = 0; i < (int)hdr.num_joints; i++)
     {
         iqmjoint &j = joints[i];
@@ -181,12 +181,12 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
         auto scale = Vec3(j.scale[0], j.scale[1], j.scale[2]);
         auto rotate = normalize(*(Quat*)(j.rotate));
         auto scalerot_mat = Matrix3x3(rotate) * diagonal3x3(scale);
-        baseframe[i] = transpose( Matrix4x3(scalerot_mat[0], scalerot_mat[1], scalerot_mat[2], translate) );
-        inversebaseframe[i] = invert(baseframe[i]);
+        baseframe[i] = transpose( Matrix4x4( Vec4(scalerot_mat[0],0), Vec4(scalerot_mat[1],0), Vec4(scalerot_mat[2],0), Vec4(translate,1)) );
+        inversebaseframe[i] = inverse(baseframe[i]);
         if(j.parent >= 0)
         {
-            baseframe[i] =        transform(baseframe[j.parent], baseframe[i]);
-            inversebaseframe[i] = transform(inversebaseframe[i], inversebaseframe[j.parent]);
+            baseframe[i] =        baseframe[i] * baseframe[j.parent];
+            inversebaseframe[i] = inversebaseframe[j.parent] * inversebaseframe[i];
         }
     }
 
@@ -253,7 +253,7 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
     const char *str = hdr.ofs_text ? (char *)&buf[hdr.ofs_text] : "";
     anims = (iqmanim *)&buf[hdr.ofs_anims];
     poses = (iqmpose *)&buf[hdr.ofs_poses];
-    frames = new Matrix3x4[hdr.num_frames * hdr.num_poses];
+    frames = new Matrix4x4[hdr.num_frames * hdr.num_poses];
     uint16_t *framedata = (uint16_t *)&buf[hdr.ofs_frames];
 
     for(int i = 0; i < (int)hdr.num_frames; i++)
@@ -274,18 +274,20 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
             scale.x = p.channeloffset[7]; if(p.mask&0x80) scale.x += *framedata++ * p.channelscale[7];
             scale.y = p.channeloffset[8]; if(p.mask&0x100) scale.y += *framedata++ * p.channelscale[8];
             scale.z = p.channeloffset[9]; if(p.mask&0x200) scale.z += *framedata++ * p.channelscale[9];
+
             // Concatenate each pose with the inverse base pose to avoid doing this at animation time.
             // If the joint has a parent, then it needs to be pre-concatenated with its parent's base pose.
-            // Thus it all negates at animation time like so: 
+            // Thus it all negates at animation time like so:
             //   (parentPose * parentInverseBasePose) * (parentBasePose * childPose * childInverseBasePose) =>
             //   parentPose * (parentInverseBasePose * parentBasePose) * childPose * childInverseBasePose =>
             //   parentPose * childPose * childInverseBasePose
+
             auto scalerot_mat = Matrix3x3(normalize(rotate)) * diagonal3x3(scale);
-            Matrix3x4 m = transpose( Matrix4x3( scalerot_mat[0], scalerot_mat[1], scalerot_mat[2], translate));
+            Matrix4x4 m = transpose( Matrix4x4( Vec4(scalerot_mat[0], 0), Vec4(scalerot_mat[1], 0), Vec4(scalerot_mat[2], 0), Vec4(translate,1)));
             if(p.parent >= 0) { 
-              frames[i*hdr.num_poses + j] = transform(baseframe[p.parent], m, inversebaseframe[j]);
+              frames[i*hdr.num_poses + j] = inversebaseframe[j] * m * baseframe[p.parent];
             } else {
-              frames[i*hdr.num_poses + j] = transform(m, inversebaseframe[j]);
+              frames[i*hdr.num_poses + j] = inversebaseframe[j] * m;
             }
         }
     }
@@ -341,15 +343,15 @@ void animateiqm(float curframe)
     float frameoffset = curframe - frame1;
     frame1 %= numframes;
     frame2 %= numframes;
-    Matrix3x4 *mat1 = &frames[frame1 * numjoints],
+    Matrix4x4 *mat1 = &frames[frame1 * numjoints],
               *mat2 = &frames[frame2 * numjoints];
     // Interpolate matrixes between the two closest frames and concatenate with parent matrix if necessary.
     // Concatenate the result with the inverse of the base pose.
     // You would normally do animation blending and inter-frame blending here in a 3D engine.
     for(int i = 0; i < numjoints; i++)
     {
-        Matrix3x4 mat = mat1[i]*(1 - frameoffset) + mat2[i]*frameoffset;
-        if(joints[i].parent >= 0) outframe[i] = transform(outframe[joints[i].parent], mat);
+        Matrix4x4 mat = mat1[i]*(1 - frameoffset) + mat2[i]*frameoffset;
+        if(joints[i].parent >= 0) outframe[i] = mat * outframe[joints[i].parent];
         else outframe[i] = mat;
     }
 }
@@ -473,21 +475,21 @@ shader gpuskin("gpu skin",
 "  #extension GL_ARB_uniform_buffer_object : enable\n"
 "  layout(std140) uniform animdata\n"
 "  {\n"
-"     uniform mat3x4 bonemats[80];\n"
+"     uniform mat4x4 bonemats[80];\n"
 "  };\n"
 "#else\n"
-"  uniform mat3x4 bonemats[80];\n"
+"  uniform mat4x4 bonemats[80];\n"
 "#endif\n"
 "attribute vec4 vweights;\n"
 "attribute vec4 vbones;\n"
 "attribute vec4 vtangent;\n"
 "void main(void)\n"
 "{\n"
-"   mat3x4 m = bonemats[int(vbones.x)] * vweights.x;\n"
+"   mat4x4 m = bonemats[int(vbones.x)] * vweights.x;\n"
 "   m += bonemats[int(vbones.y)] * vweights.y;\n"
 "   m += bonemats[int(vbones.z)] * vweights.z;\n"
 "   m += bonemats[int(vbones.w)] * vweights.w;\n"
-"   vec4 mpos = vec4(gl_Vertex * m, gl_Vertex.w);\n"
+"   vec4 mpos = gl_Vertex * m;\n"
 "   gl_Position = gl_ModelViewProjectionMatrix * mpos;\n"
 "   gl_TexCoord[0] = gl_MultiTexCoord0;\n"
 "   mat3 madjtrans = mat3(cross(m[1].xyz, m[2].xyz), cross(m[2].xyz, m[0].xyz), cross(m[0].xyz, m[1].xyz));\n"
@@ -559,14 +561,14 @@ void renderiqm()
         {
             glBindBuffer_(GL_UNIFORM_BUFFER, ubo);
             glBufferData_(GL_UNIFORM_BUFFER, ubosize, nullptr, GL_STREAM_DRAW);
-            glBufferSubData_(GL_UNIFORM_BUFFER, bonematsoffset, numjoints*sizeof(Matrix3x4), (float*)(outframe));
+            glBufferSubData_(GL_UNIFORM_BUFFER, bonematsoffset, numjoints*sizeof(Matrix4x4), (float*)(outframe));
             glBindBuffer_(GL_UNIFORM_BUFFER, 0);
 
             glBindBufferBase_(GL_UNIFORM_BUFFER, 0, ubo);
         }
         else 
         {
-            glUniformMatrix3x4fv_(gpuskin.getparam("bonemats"), numjoints, GL_FALSE, (float*)(outframe));
+            glUniformMatrix4fv_(gpuskin.getparam("bonemats"), numjoints, GL_FALSE, (float*)(outframe));
         }
     }
     else 

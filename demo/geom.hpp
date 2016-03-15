@@ -221,9 +221,6 @@ struct Matrix3x3
 
 };
 
-
-
-
 struct Matrix4x4
 {
     Vec4 a, b, c, d;
@@ -429,8 +426,6 @@ Matrix4x4 &operator*=(Matrix4x4& mat, const Matrix4x4 &o) {
   return (mat = mat * o);
 }
 
- 
-
 #endif
 
 Matrix3x4 transform(const Matrix3x4& m1, const Matrix3x4 &m2)
@@ -448,13 +443,6 @@ Matrix3x4 transform(const Matrix3x4& m1, const Matrix3x4 &m2)
     m2[2],
     Vec4(0,0,0,1)
   );
-
-  /*
-  printf("tmp1:\n");
-  print(tmp1);
-  printf("tmp2:\n");
-  print(tmp2);
-  */
 
   return Matrix3x4(tmp2 * tmp1);
 }
