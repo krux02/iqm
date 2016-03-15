@@ -14,6 +14,7 @@
 
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <vector>
 
 #define EXTS(EXT) \
     EXT(PFNGLUSEPROGRAMPROC, glUseProgram, true) \
@@ -89,7 +90,7 @@ GLuint notexture = 0;
 iqmjoint *joints = nullptr;
 iqmpose *poses = nullptr;
 iqmanim *anims = nullptr;
-Matrix4x4 *baseframe = nullptr, *inversebaseframe = nullptr, *outframe = nullptr, *frames = nullptr;
+std::vector<Matrix4x4> baseframe, inversebaseframe, outframe, frames;
 
 struct vertex
 {
@@ -112,10 +113,6 @@ void cleanupiqm()
         delete[] textures;
     }
     if(notexture) glDeleteTextures(1, &notexture);
-    delete[] baseframe;
-    delete[] inversebaseframe;
-    delete[] outframe;
-    delete[] frames;
     if(ebo) glDeleteBuffers_(1, &ebo);
     if(vbo) glDeleteBuffers_(1, &vbo);
     if(ubo) glDeleteBuffers_(1, &ubo);
@@ -135,7 +132,7 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
     numtris = hdr.num_triangles;
     numverts = hdr.num_vertexes;
     numjoints = hdr.num_joints;
-    outframe = new Matrix4x4[hdr.num_joints];
+    outframe.resize(hdr.num_joints);
     textures = new GLuint[nummeshes];
     memset(textures, 0, nummeshes*sizeof(GLuint));
 
@@ -172,8 +169,8 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
     meshes = (iqmmesh *)&buf[hdr.ofs_meshes];
     joints = (iqmjoint *)&buf[hdr.ofs_joints];
 
-    baseframe = new Matrix4x4[hdr.num_joints];
-    inversebaseframe = new Matrix4x4[hdr.num_joints];
+    baseframe.resize(hdr.num_joints);
+    inversebaseframe.resize(hdr.num_joints);
     for(int i = 0; i < (int)hdr.num_joints; i++)
     {
         iqmjoint &j = joints[i];
@@ -234,10 +231,8 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
     if(animdata)
     {
         if(animdata != meshdata) delete[] animdata;
-        delete[] frames;
         animdata = nullptr;
         anims = nullptr;
-        frames = 0;
         numframes = 0;
         numanims = 0;
     }        
@@ -253,7 +248,7 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
     const char *str = hdr.ofs_text ? (char *)&buf[hdr.ofs_text] : "";
     anims = (iqmanim *)&buf[hdr.ofs_anims];
     poses = (iqmpose *)&buf[hdr.ofs_poses];
-    frames = new Matrix4x4[hdr.num_frames * hdr.num_poses];
+    frames.resize(hdr.num_frames * hdr.num_poses);
     uint16_t *framedata = (uint16_t *)&buf[hdr.ofs_frames];
 
     for(int i = 0; i < (int)hdr.num_frames; i++)
@@ -284,10 +279,10 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
 
             auto scalerot_mat = Matrix3x3(normalize(rotate)) * diagonal3x3(scale);
             Matrix4x4 m = Matrix4x4( Vec4(scalerot_mat[0], 0), Vec4(scalerot_mat[1], 0), Vec4(scalerot_mat[2], 0), Vec4(translate,1));
-            if(p.parent >= 0) { 
-              frames[i*hdr.num_poses + j] = transpose(baseframe[p.parent] * m * inversebaseframe[j]);
+            if(p.parent >= 0) {
+              frames[i*hdr.num_poses + j] = baseframe[p.parent] * m * inversebaseframe[j];
             } else {
-              frames[i*hdr.num_poses + j] = transpose(m * inversebaseframe[j]);
+              frames[i*hdr.num_poses + j] = m * inversebaseframe[j];
             }
         }
     }
@@ -351,7 +346,7 @@ void animateiqm(float curframe)
     for(int i = 0; i < numjoints; i++)
     {
         Matrix4x4 mat = mat1[i]*(1 - frameoffset) + mat2[i]*frameoffset;
-        if(joints[i].parent >= 0) outframe[i] = mat * outframe[joints[i].parent];
+        if(joints[i].parent >= 0) outframe[i] = outframe[joints[i].parent] * mat;
         else outframe[i] = mat;
     }
 }
@@ -469,41 +464,44 @@ struct shader
 binding gpuskinattribs[] = { { "vtangent", 1 }, { "vweights", 6 }, { "vbones", 7 }, { nullptr, -1 } };
 binding gpuskintexs[] = { { "tex", 0 }, { nullptr, -1 } };
 shader gpuskin("gpu skin",
+R"vertex(
+#version 120
+#ifdef GL_ARB_uniform_buffer_object
+  #extension GL_ARB_uniform_buffer_object : enable
+  layout(std140) uniform animdata
+  {
+     uniform mat4x4 bonemats[80];
+  };
+#else
+  uniform mat4x4 bonemats[80];
+#endif
+attribute vec4 vweights;
+attribute vec4 vbones;
+attribute vec4 vtangent;
+void main(void)
+{
+   mat4x4 m = bonemats[int(vbones.x)] * vweights.x;
+   m += bonemats[int(vbones.y)] * vweights.y;
+   m += bonemats[int(vbones.z)] * vweights.z;
+   m += bonemats[int(vbones.w)] * vweights.w;
+   vec4 mpos = m * gl_Vertex;
+   gl_Position = gl_ModelViewProjectionMatrix * mpos;
+   gl_TexCoord[0] = gl_MultiTexCoord0;
+   mat3 madjtrans = mat3(cross(m[1].xyz, m[2].xyz), cross(m[2].xyz, m[0].xyz), cross(m[0].xyz, m[1].xyz));
+   vec3 mnormal = gl_Normal * madjtrans;
+   vec3 mtangent = vtangent.xyz * madjtrans; // tangent not used, just here as an example
+   vec3 mbitangent = cross(mnormal, mtangent) * vtangent.w; // bitangent not used, just here as an example
+   gl_FrontColor = gl_Color * (clamp(dot(normalize(gl_NormalMatrix * mnormal), gl_LightSource[0].position.xyz), 0.0, 1.0) * gl_LightSource[0].diffuse + gl_LightSource[0].ambient);
+}
+)vertex",
 
-"#version 120\n"
-"#ifdef GL_ARB_uniform_buffer_object\n"
-"  #extension GL_ARB_uniform_buffer_object : enable\n"
-"  layout(std140) uniform animdata\n"
-"  {\n"
-"     uniform mat4x4 bonemats[80];\n"
-"  };\n"
-"#else\n"
-"  uniform mat4x4 bonemats[80];\n"
-"#endif\n"
-"attribute vec4 vweights;\n"
-"attribute vec4 vbones;\n"
-"attribute vec4 vtangent;\n"
-"void main(void)\n"
-"{\n"
-"   mat4x4 m = bonemats[int(vbones.x)] * vweights.x;\n"
-"   m += bonemats[int(vbones.y)] * vweights.y;\n"
-"   m += bonemats[int(vbones.z)] * vweights.z;\n"
-"   m += bonemats[int(vbones.w)] * vweights.w;\n"
-"   vec4 mpos = gl_Vertex * m;\n"
-"   gl_Position = gl_ModelViewProjectionMatrix * mpos;\n"
-"   gl_TexCoord[0] = gl_MultiTexCoord0;\n"
-"   mat3 madjtrans = mat3(cross(m[1].xyz, m[2].xyz), cross(m[2].xyz, m[0].xyz), cross(m[0].xyz, m[1].xyz));\n"
-"   vec3 mnormal = gl_Normal * madjtrans;\n"
-"   vec3 mtangent = vtangent.xyz * madjtrans; // tangent not used, just here as an example\n"
-"   vec3 mbitangent = cross(mnormal, mtangent) * vtangent.w; // bitangent not used, just here as an example\n"
-"   gl_FrontColor = gl_Color * (clamp(dot(normalize(gl_NormalMatrix * mnormal), gl_LightSource[0].position.xyz), 0.0, 1.0) * gl_LightSource[0].diffuse + gl_LightSource[0].ambient);\n"
-"}\n",
-
-"uniform sampler2D tex;\n"
-"void main(void)\n"
-"{\n"
-"   gl_FragColor = gl_Color * texture2D(tex, gl_TexCoord[0].xy);\n"
-"}\n",
+R"fragment(
+uniform sampler2D tex;
+void main(void)
+{
+   gl_FragColor = gl_Color * texture2D(tex, gl_TexCoord[0].xy);
+}
+)fragment",
 
 gpuskinattribs, gpuskintexs);
 
@@ -511,20 +509,24 @@ binding noskinattribs[] = { { "vtangent", 1 }, { nullptr, -1 } };
 binding noskintexs[] = { { "tex", 0 }, { nullptr, -1 } };
 shader noskin("no skin",
 
-"attribute vec4 vtangent;\n"
-"void main(void)\n"
-"{\n"
-"   gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;\n"
-"   gl_TexCoord[0] = gl_MultiTexCoord0;\n"
-"   vec3 vbitangent = cross(gl_Normal, vtangent.xyz) * vtangent.w; // bitangent not used, just here as an example\n"
-"   gl_FrontColor = gl_Color * (clamp(dot(normalize(gl_NormalMatrix * gl_Normal), gl_LightSource[0].position.xyz), 0.0, 1.0) * gl_LightSource[0].diffuse + gl_LightSource[0].ambient);\n"
-"}\n",
+R"vertex(
+attribute vec4 vtangent;
+void main(void)
+{
+   gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+   gl_TexCoord[0] = gl_MultiTexCoord0;
+   vec3 vbitangent = cross(gl_Normal, vtangent.xyz) * vtangent.w; // bitangent not used, just here as an example
+   gl_FrontColor = gl_Color * (clamp(dot(normalize(gl_NormalMatrix * gl_Normal), gl_LightSource[0].position.xyz), 0.0, 1.0) * gl_LightSource[0].diffuse + gl_LightSource[0].ambient);
+}
+)vertex",
 
-"uniform sampler2D tex;\n"
-"void main(void)\n"
-"{\n"
-"   gl_FragColor = gl_Color * texture2D(tex, gl_TexCoord[0].xy);\n"
-"}\n",
+R"fragment(
+uniform sampler2D tex;
+void main(void)
+{
+   gl_FragColor = gl_Color * texture2D(tex, gl_TexCoord[0].xy);
+}
+)fragment",
 
 noskinattribs, noskintexs);
 
@@ -561,14 +563,14 @@ void renderiqm()
         {
             glBindBuffer_(GL_UNIFORM_BUFFER, ubo);
             glBufferData_(GL_UNIFORM_BUFFER, ubosize, nullptr, GL_STREAM_DRAW);
-            glBufferSubData_(GL_UNIFORM_BUFFER, bonematsoffset, numjoints*sizeof(Matrix4x4), (float*)(outframe));
+            glBufferSubData_(GL_UNIFORM_BUFFER, bonematsoffset, numjoints*sizeof(Matrix4x4), (float*)(outframe.data()));
             glBindBuffer_(GL_UNIFORM_BUFFER, 0);
 
             glBindBufferBase_(GL_UNIFORM_BUFFER, 0, ubo);
         }
         else 
         {
-            glUniformMatrix4fv_(gpuskin.getparam("bonemats"), numjoints, GL_FALSE, (float*)(outframe));
+            glUniformMatrix4fv_(gpuskin.getparam("bonemats"), numjoints, GL_FALSE, (float*)(outframe.data()));
         }
     }
     else 
