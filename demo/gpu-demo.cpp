@@ -182,11 +182,11 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
         auto rotate = normalize(*(Quat*)(j.rotate));
         auto scalerot_mat = Matrix3x3(rotate) * diagonal3x3(scale);
         baseframe[i] = Matrix4x4( Vec4(scalerot_mat[0],0), Vec4(scalerot_mat[1],0), Vec4(scalerot_mat[2],0), Vec4(translate,1));
-        inversebaseframe[i] = inverse(transpose(baseframe[i]));
+        inversebaseframe[i] = inverse(baseframe[i]);
         if(j.parent >= 0)
         {
             baseframe[i] =        baseframe[j.parent] * baseframe[i];
-            inversebaseframe[i] = inversebaseframe[j.parent] * inversebaseframe[i];
+            inversebaseframe[i] = inversebaseframe[i] * inversebaseframe[j.parent];
         }
     }
 
@@ -283,11 +283,11 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
             //   parentPose * childPose * childInverseBasePose
 
             auto scalerot_mat = Matrix3x3(normalize(rotate)) * diagonal3x3(scale);
-            Matrix4x4 m = transpose( Matrix4x4( Vec4(scalerot_mat[0], 0), Vec4(scalerot_mat[1], 0), Vec4(scalerot_mat[2], 0), Vec4(translate,1)));
+            Matrix4x4 m = Matrix4x4( Vec4(scalerot_mat[0], 0), Vec4(scalerot_mat[1], 0), Vec4(scalerot_mat[2], 0), Vec4(translate,1));
             if(p.parent >= 0) { 
-              frames[i*hdr.num_poses + j] = inversebaseframe[j] * m * transpose(baseframe[p.parent]);
+              frames[i*hdr.num_poses + j] = transpose(baseframe[p.parent] * m * inversebaseframe[j]);
             } else {
-              frames[i*hdr.num_poses + j] = inversebaseframe[j] * m;
+              frames[i*hdr.num_poses + j] = transpose(m * inversebaseframe[j]);
             }
         }
     }
