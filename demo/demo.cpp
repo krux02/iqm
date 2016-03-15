@@ -98,8 +98,8 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf) {
         baseframe[i] = transpose(Matrix4x3(scalerot_mat[0], scalerot_mat[1], scalerot_mat[2], translate));
         inversebaseframe[i] = invert(baseframe[i]);
         if(j.parent >= 0)  {
-            baseframe[i] = baseframe[j.parent] * baseframe[i];
-            inversebaseframe[i] *= inversebaseframe[j.parent];
+            baseframe[i]        = transform( baseframe[j.parent], baseframe[i]);
+            inversebaseframe[i] = transform( inversebaseframe[i], inversebaseframe[j.parent]);
         }
     }
 
@@ -166,8 +166,8 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf) {
             auto rotateQuat = normalize(*(Quat*)(rotate));
             auto scalerot_mat = Matrix3x3(rotateQuat) * diagonal3x3(scale);
             auto m = transpose(Matrix4x3(scalerot_mat[0], scalerot_mat[1], scalerot_mat[2], translate));
-            if(p.parent >= 0) frames[i*hdr.num_poses + j] = baseframe[p.parent] * m * inversebaseframe[j];
-            else frames[i*hdr.num_poses + j] = m * inversebaseframe[j];
+            if(p.parent >= 0) frames[i*hdr.num_poses + j] = transform(baseframe[p.parent], m, inversebaseframe[j]);
+            else frames[i*hdr.num_poses + j] = transform(m , inversebaseframe[j]);
         }
     }
  
@@ -226,7 +226,7 @@ void animateiqm(float curframe) {
     // You would normally do animation blending and inter-frame blending here in a 3D engine.
     for(int32_t i = 0; i < numjoints; i++) {
         Matrix3x4 mat = mat1[i]*(1 - frameoffset) + mat2[i]*frameoffset;
-        if(joints[i].parent >= 0) outframe[i] = outframe[joints[i].parent] * mat;
+        if(joints[i].parent >= 0) outframe[i] = transform(outframe[joints[i].parent], mat);
         else outframe[i] = mat;
     }
     // The actual vertex generation based on the matrixes follows...
@@ -431,7 +431,7 @@ void keyboardfunc(uint8_t c, int32_t x, int32_t y) {
 }
 
 int32_t main(int argc, char **argv) {
-    //test();
+    test();
     glutInitWindowSize(640, 480);
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_DEPTH | GLUT_RGB);
