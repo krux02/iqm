@@ -29,7 +29,7 @@ iqmjoint *joints = nullptr;
 iqmpose *poses = nullptr;
 iqmanim *anims = nullptr;
 iqmbounds *bounds = nullptr;
-Matrix3x4 *baseframe = nullptr, *inversebaseframe = nullptr, *outframe = nullptr, *frames = nullptr;
+Matrix4x4 *baseframe = nullptr, *inversebaseframe = nullptr, *outframe = nullptr, *frames = nullptr;
 
 void cleanupiqm() {
     if(textures) {
@@ -64,7 +64,7 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf) {
     outnormal = new float[3*numverts];
     outtangent = new float[3*numverts];
     outbitangent = new float[3*numverts];
-    outframe = new Matrix3x4[hdr.num_joints];
+    outframe = new Matrix4x4[hdr.num_joints];
     textures = new GLuint[nummeshes];
     memset(textures, 0, nummeshes*sizeof(GLuint));
 
@@ -87,19 +87,19 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf) {
     joints = (iqmjoint *)&buf[hdr.ofs_joints];
     if(hdr.ofs_adjacency) adjacency = (iqmtriangle *)&buf[hdr.ofs_adjacency];
 
-    baseframe = new Matrix3x4[hdr.num_joints];
-    inversebaseframe = new Matrix3x4[hdr.num_joints];
+    baseframe = new Matrix4x4[hdr.num_joints];
+    inversebaseframe = new Matrix4x4[hdr.num_joints];
     for(int32_t i = 0; i < (int32_t)hdr.num_joints; i++) {
         iqmjoint &j = joints[i];
         auto translate = Vec3(j.translate[0], j.translate[1], j.translate[2]);
         auto scale = Vec3(j.scale[0], j.scale[1], j.scale[2]);
         auto rotate_mat = Matrix3x3(normalize(*(Quat*)(j.rotate)));
         auto scalerot_mat = rotate_mat * diagonal3x3(scale);
-        baseframe[i] = transpose(Matrix4x3(scalerot_mat[0], scalerot_mat[1], scalerot_mat[2], translate));
-        inversebaseframe[i] = invert(baseframe[i]);
+        baseframe[i] = transpose(Matrix4x4(Vec4(scalerot_mat[0],0), Vec4(scalerot_mat[1],0), Vec4(scalerot_mat[2],0), Vec4(translate,1)));
+        inversebaseframe[i] = inverse(baseframe[i]);
         if(j.parent >= 0)  {
-            baseframe[i]        = transform( baseframe[j.parent], baseframe[i]);
-            inversebaseframe[i] = transform( inversebaseframe[i], inversebaseframe[j.parent]);
+            baseframe[i]        = baseframe[i] * baseframe[j.parent];
+            inversebaseframe[i] = inversebaseframe[j.parent] * inversebaseframe[i];
         }
     }
 
@@ -138,7 +138,7 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf) {
     const char *str = hdr.ofs_text ? (char *)&buf[hdr.ofs_text] : "";
     anims = (iqmanim *)&buf[hdr.ofs_anims];
     poses = (iqmpose *)&buf[hdr.ofs_poses];
-    frames = new Matrix3x4[hdr.num_frames * hdr.num_poses];
+    frames = new Matrix4x4[hdr.num_frames * hdr.num_poses];
     uint16_t *framedata = (uint16_t *)&buf[hdr.ofs_frames];
     if(hdr.ofs_bounds) bounds = (iqmbounds *)&buf[hdr.ofs_bounds];
 
@@ -165,9 +165,9 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf) {
             //   parentPose * childPose * childInverseBasePose
             auto rotateQuat = normalize(*(Quat*)(rotate));
             auto scalerot_mat = Matrix3x3(rotateQuat) * diagonal3x3(scale);
-            auto m = transpose(Matrix4x3(scalerot_mat[0], scalerot_mat[1], scalerot_mat[2], translate));
-            if(p.parent >= 0) frames[i*hdr.num_poses + j] = transform(baseframe[p.parent], m, inversebaseframe[j]);
-            else frames[i*hdr.num_poses + j] = transform(m , inversebaseframe[j]);
+            auto m = transpose(Matrix4x4(Vec4(scalerot_mat[0],0), Vec4(scalerot_mat[1],0), Vec4(scalerot_mat[2],0), Vec4(translate,1)));
+            if(p.parent >= 0) frames[i*hdr.num_poses + j] = inversebaseframe[j] * m * baseframe[p.parent];
+            else frames[i*hdr.num_poses + j] = inversebaseframe[j] * m;
         }
     }
  
@@ -219,14 +219,14 @@ void animateiqm(float curframe) {
     float frameoffset = curframe - frame1;
     frame1 %= numframes;
     frame2 %= numframes;
-    Matrix3x4 *mat1 = &frames[frame1 * numjoints],
+    Matrix4x4 *mat1 = &frames[frame1 * numjoints],
               *mat2 = &frames[frame2 * numjoints];
     // Interpolate matrixes between the two closest frames and concatenate with parent matrix if necessary.
     // Concatenate the result with the inverse of the base pose.
     // You would normally do animation blending and inter-frame blending here in a 3D engine.
     for(int32_t i = 0; i < numjoints; i++) {
-        Matrix3x4 mat = mat1[i]*(1 - frameoffset) + mat2[i]*frameoffset;
-        if(joints[i].parent >= 0) outframe[i] = transform(outframe[joints[i].parent], mat);
+        Matrix4x4 mat = mat1[i]*(1 - frameoffset) + mat2[i]*frameoffset;
+        if(joints[i].parent >= 0) outframe[i] = mat * outframe[joints[i].parent];
         else outframe[i] = mat;
     }
     // The actual vertex generation based on the matrixes follows...
@@ -243,7 +243,7 @@ void animateiqm(float curframe) {
         // There are only at most 4 weights per vertex, and they are in 
         // sorted order from highest weight to lowest weight. Weights with 
         // 0 values, which are always at the end, are unused.
-        Matrix3x4 mat = outframe[index[0]] * (weight[0]/255.0f);
+        Matrix4x4 mat = outframe[index[0]] * (weight[0]/255.0f);
         for(int32_t j = 1; j < 4 && weight[j]; j++)
             mat += outframe[index[j]] * (weight[j]/255.0f);
 
@@ -251,7 +251,8 @@ void animateiqm(float curframe) {
         // Position uses the full 3x4 transformation matrix.
         // Normals and tangents only use the 3x3 rotation part 
         // of the transformation matrix.
-        *dstpos = transpose(mat) * Vec4(*srcpos,1);
+        auto tmp = transpose(mat) * Vec4(*srcpos,1);
+        *dstpos = Vec3(tmp.x, tmp.y, tmp.z);
 
         // Note that if the matrix includes non-uniform scaling, normal vectors
         // must be transformed by the inverse-transpose of the matrix to have the
