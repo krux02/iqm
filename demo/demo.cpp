@@ -89,17 +89,18 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf) {
 
     baseframe = new Matrix4x4[hdr.num_joints];
     inversebaseframe = new Matrix4x4[hdr.num_joints];
+
     for(int32_t i = 0; i < (int32_t)hdr.num_joints; i++) {
         iqmjoint &j = joints[i];
         auto translate = Vec3(j.translate[0], j.translate[1], j.translate[2]);
         auto scale = Vec3(j.scale[0], j.scale[1], j.scale[2]);
         auto rotate_mat = Matrix3x3(normalize(*(Quat*)(j.rotate)));
         auto scalerot_mat = rotate_mat * diagonal3x3(scale);
-        baseframe[i] = transpose(Matrix4x4(Vec4(scalerot_mat[0],0), Vec4(scalerot_mat[1],0), Vec4(scalerot_mat[2],0), Vec4(translate,1)));
+        baseframe[i] = Matrix4x4(Vec4(scalerot_mat[0],0), Vec4(scalerot_mat[1],0), Vec4(scalerot_mat[2],0), Vec4(translate,1));
         inversebaseframe[i] = inverse(baseframe[i]);
         if(j.parent >= 0)  {
-            baseframe[i]        = baseframe[i] * baseframe[j.parent];
-            inversebaseframe[i] = inversebaseframe[j.parent] * inversebaseframe[i];
+            baseframe[i]        = baseframe[j.parent] * baseframe[i];
+            inversebaseframe[i] = inversebaseframe[i] * inversebaseframe[j.parent];
         }
     }
 
@@ -165,9 +166,9 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf) {
             //   parentPose * childPose * childInverseBasePose
             auto rotateQuat = normalize(*(Quat*)(rotate));
             auto scalerot_mat = Matrix3x3(rotateQuat) * diagonal3x3(scale);
-            auto m = transpose(Matrix4x4(Vec4(scalerot_mat[0],0), Vec4(scalerot_mat[1],0), Vec4(scalerot_mat[2],0), Vec4(translate,1)));
-            if(p.parent >= 0) frames[i*hdr.num_poses + j] = inversebaseframe[j] * m * baseframe[p.parent];
-            else frames[i*hdr.num_poses + j] = inversebaseframe[j] * m;
+            Matrix4x4 m(Vec4(scalerot_mat[0],0), Vec4(scalerot_mat[1],0), Vec4(scalerot_mat[2],0), Vec4(translate,1));
+            if(p.parent >= 0) frames[i*hdr.num_poses + j] = transpose(baseframe[p.parent] * m * inversebaseframe[j]);
+            else frames[i*hdr.num_poses + j] = transpose(m * inversebaseframe[j]);
         }
     }
  
