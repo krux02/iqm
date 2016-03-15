@@ -122,7 +122,7 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf) {
         delete[] frames;
         animdata = nullptr;
         anims = nullptr;
-        frames = 0;
+        frames = nullptr;
         numframes = 0;
         numanims = 0;
     }        
@@ -146,7 +146,7 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf) {
     for(int32_t i = 0; i < (int32_t)hdr.num_frames; i++) {
         for(int32_t j = 0; j < (int32_t)hdr.num_poses; j++) {
             iqmpose &p = poses[j];
-            float rotate[4];
+            Quat rotate;
             Vec3 translate, scale;
             translate.x = p.channeloffset[0]; if(p.mask&0x01) translate.x += *framedata++ * p.channelscale[0];
             translate.y = p.channeloffset[1]; if(p.mask&0x02) translate.y += *framedata++ * p.channelscale[1];
@@ -164,11 +164,10 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf) {
             //   (parentPose * parentInverseBasePose) * (parentBasePose * childPose * childInverseBasePose) =>
             //   parentPose * (parentInverseBasePose * parentBasePose) * childPose * childInverseBasePose =>
             //   parentPose * childPose * childInverseBasePose
-            auto rotateQuat = normalize(*(Quat*)(rotate));
-            auto scalerot_mat = Matrix3x3(rotateQuat) * diagonal3x3(scale);
+            auto scalerot_mat = Matrix3x3(normalize(rotate)) * diagonal3x3(scale);
             Matrix4x4 m(Vec4(scalerot_mat[0],0), Vec4(scalerot_mat[1],0), Vec4(scalerot_mat[2],0), Vec4(translate,1));
-            if(p.parent >= 0) frames[i*hdr.num_poses + j] = transpose(baseframe[p.parent] * m * inversebaseframe[j]);
-            else frames[i*hdr.num_poses + j] = transpose(m * inversebaseframe[j]);
+            if(p.parent >= 0) frames[i*hdr.num_poses + j] = baseframe[p.parent] * m * inversebaseframe[j];
+            else frames[i*hdr.num_poses + j] = m * inversebaseframe[j];
         }
     }
  
@@ -227,7 +226,7 @@ void animateiqm(float curframe) {
     // You would normally do animation blending and inter-frame blending here in a 3D engine.
     for(int32_t i = 0; i < numjoints; i++) {
         Matrix4x4 mat = mat1[i]*(1 - frameoffset) + mat2[i]*frameoffset;
-        if(joints[i].parent >= 0) outframe[i] = mat * outframe[joints[i].parent];
+        if(joints[i].parent >= 0) outframe[i] = outframe[joints[i].parent] * mat;
         else outframe[i] = mat;
     }
     // The actual vertex generation based on the matrixes follows...
@@ -252,7 +251,7 @@ void animateiqm(float curframe) {
         // Position uses the full 3x4 transformation matrix.
         // Normals and tangents only use the 3x3 rotation part 
         // of the transformation matrix.
-        auto tmp = transpose(mat) * Vec4(*srcpos,1);
+        auto tmp = mat * Vec4(*srcpos,1);
         *dstpos = Vec3(tmp.x, tmp.y, tmp.z);
 
         // Note that if the matrix includes non-uniform scaling, normal vectors
@@ -266,6 +265,7 @@ void animateiqm(float curframe) {
         // upper 3x3 part of the position matrix instead of the adjoint-transpose shown 
         // here.
        
+#if 1
         auto mat_a = Vec3(mat[0].x, mat[0].y, mat[0].z);
         auto mat_b = Vec3(mat[1].x, mat[1].y, mat[1].z);
         auto mat_c = Vec3(mat[2].x, mat[2].y, mat[2].z);
@@ -274,11 +274,14 @@ void animateiqm(float curframe) {
             cross(mat_c, mat_a),
             cross(mat_a, mat_b)
         );
+#else
+        Matrix3x3 matnorm = transpose(inverse(Matrix3x3(mat)));
+#endif
 
-        *dstnorm = transpose(matnorm) * *srcnorm;
+        *dstnorm = matnorm * *srcnorm;
         // Note that input tangent data has 4 coordinates, 
         // so only transform the first 3 as the tangent vector.
-        *dsttan = transpose(matnorm) * Vec3(srctan->x, srctan->y, srctan->z);
+        *dsttan = matnorm * Vec3(srctan->x, srctan->y, srctan->z);
         // Note that bitangent = cross(normal, tangent) * sign, 
         // where the sign is stored in the 4th coordinate of the input tangent data.
         *dstbitan = cross(*dstnorm, *dsttan) * srctan->w;
