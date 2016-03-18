@@ -307,43 +307,6 @@ struct Matrix3x4
 Matrix3x3::Matrix3x3(const Matrix4x3& m) : a(m.a), b(m.b), c(m.c) {}
 Matrix3x3::Matrix3x3(const Matrix3x4& m) : a(m.a.x, m.a.y, m.a.z), b(m.b.x, m.b.y, m.b.z), c(m.c.x, m.c.y, m.c.z) {}
 
-void print(const Matrix3x3& m) {
-  printf("    %f %f %f\n", m[0].x, m[1].x, m[2].x);
-  printf("    %f %f %f\n", m[0].y, m[1].y, m[2].y);
-  printf("    %f %f %f\n", m[0].z, m[1].z, m[2].z);
-}
-
-inline void print(const Matrix3x4& m) {
-  printf("    %f %f %f\n", m[0].x, m[1].x, m[2].x);
-  printf("    %f %f %f\n", m[0].y, m[1].y, m[2].y);
-  printf("    %f %f %f\n", m[0].z, m[1].z, m[2].z);
-  printf("    %f %f %f\n", m[0].w, m[1].w, m[2].w);
-}
-
-inline void print(const Matrix4x3& m) {
-  printf("    %f %f %f %f\n", m[0].x, m[1].x, m[2].x, m[3].x);
-  printf("    %f %f %f %f\n", m[0].y, m[1].y, m[2].y, m[3].y);
-  printf("    %f %f %f %f\n", m[0].z, m[1].z, m[2].z, m[3].z);
-}
-
-inline void print(const Matrix4x4& m) {
-  printf("    %f %f %f %f\n", m[0].x, m[1].x, m[2].x, m[3].x);
-  printf("    %f %f %f %f\n", m[0].y, m[1].y, m[2].y, m[3].y);
-  printf("    %f %f %f %f\n", m[0].z, m[1].z, m[2].z, m[3].z);
-  printf("    %f %f %f %f\n", m[0].w, m[1].w, m[2].w, m[3].w);
-}
-
-inline void print(Quat q) {
-  printf("    %f %f %f %f\n", q[0], q[1], q[2], q[3]);
-}
-
-inline void print(Vec4 q) {
-  printf("    %f %f %f %f\n", q[0], q[1], q[2], q[3]);
-}
-
-inline void print(Vec3 q) {
-  printf("    %f %f %f\n", q[0], q[1], q[2]);
-}
 inline Matrix3x3 transpose(const Matrix3x3& mat) {
   return Matrix3x3(
     Vec3(mat.a.x, mat.b.x, mat.c.x), 
@@ -428,6 +391,44 @@ Matrix4x4 &operator*=(Matrix4x4& mat, const Matrix4x4 &o) {
 
 #endif
 
+void print(const Matrix3x3& m) {
+  printf("    %f %f %f\n", m[0].x, m[1].x, m[2].x);
+  printf("    %f %f %f\n", m[0].y, m[1].y, m[2].y);
+  printf("    %f %f %f\n", m[0].z, m[1].z, m[2].z);
+}
+
+inline void print(const Matrix3x4& m) {
+  printf("    %f %f %f\n", m[0].x, m[1].x, m[2].x);
+  printf("    %f %f %f\n", m[0].y, m[1].y, m[2].y);
+  printf("    %f %f %f\n", m[0].z, m[1].z, m[2].z);
+  printf("    %f %f %f\n", m[0].w, m[1].w, m[2].w);
+}
+
+inline void print(const Matrix4x3& m) {
+  printf("    %f %f %f %f\n", m[0].x, m[1].x, m[2].x, m[3].x);
+  printf("    %f %f %f %f\n", m[0].y, m[1].y, m[2].y, m[3].y);
+  printf("    %f %f %f %f\n", m[0].z, m[1].z, m[2].z, m[3].z);
+}
+
+inline void print(const Matrix4x4& m) {
+  printf("    %f %f %f %f\n", m[0].x, m[1].x, m[2].x, m[3].x);
+  printf("    %f %f %f %f\n", m[0].y, m[1].y, m[2].y, m[3].y);
+  printf("    %f %f %f %f\n", m[0].z, m[1].z, m[2].z, m[3].z);
+  printf("    %f %f %f %f\n", m[0].w, m[1].w, m[2].w, m[3].w);
+}
+
+inline void print(Quat q) {
+  printf("    %f %f %f %f\n", q[0], q[1], q[2], q[3]);
+}
+
+inline void print(Vec4 q) {
+  printf("    %f %f %f %f\n", q[0], q[1], q[2], q[3]);
+}
+
+inline void print(Vec3 q) {
+  printf("    %f %f %f\n", q[0], q[1], q[2]);
+}
+
 Matrix3x4 transform(const Matrix3x4& m1, const Matrix3x4 &m2)
 {
   Matrix4x4 tmp1 = Matrix4x4(
@@ -447,11 +448,9 @@ Matrix3x4 transform(const Matrix3x4& m1, const Matrix3x4 &m2)
   return Matrix3x4(tmp2 * tmp1);
 }
 
-
 Matrix3x4 transform(const Matrix3x4& m1, const Matrix3x4& m2, const Matrix3x4& m3) {
   return transform(transform(m1,m2), m3);
 }
-
 
 Matrix3x3 invertRotation(Matrix3x3 mat) {
     mat[0] /= length2(mat[0]);

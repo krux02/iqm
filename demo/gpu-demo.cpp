@@ -15,6 +15,9 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <vector>
+#include <memory>
+
+#define FOR(TYPE, IDENT, BEGIN, END) for(TYPE IDENT = (TYPE)(BEGIN), IDENT##_end = (TYPE)(END); IDENT != IDENT##_end; ++IDENT)
 
 #define EXTS(EXT) \
     EXT(PFNGLUSEPROGRAMPROC, glUseProgram, true) \
@@ -82,14 +85,18 @@ extern GLuint loadtexture(const char *name, int clamp);
 // of the entire IQM file's data, it is recommended that you copy the data and
 // convert it into a more suitable internal representation for whichever 3D
 // engine you use.
-uint8_t *meshdata = nullptr, *animdata = nullptr;
-int nummeshes = 0, numtris = 0, numverts = 0, numjoints = 0, numframes = 0, numanims = 0;
-iqmmesh *meshes = nullptr;
-GLuint *textures = nullptr;
+
+// uint8_t *meshdata = nullptr, *animdata = nullptr;
+// bool meshdata = false, animdata = false;
+
+std::vector<iqmmesh> meshes;
+std::vector<GLuint> textures;
 GLuint notexture = 0;
-iqmjoint *joints = nullptr;
-iqmpose *poses = nullptr;
-iqmanim *anims = nullptr;
+
+std::vector<iqmjoint> joints;
+std::vector<iqmpose> poses;
+std::vector<iqmanim> anims;
+
 std::vector<Matrix4x4> baseframe, inversebaseframe, outframe, frames;
 
 struct vertex
@@ -107,10 +114,10 @@ GLint ubosize = 0, bonematsoffset = 0;
 
 void cleanupiqm()
 {
-    if(textures)
+    if(not textures.empty())
     {
-        glDeleteTextures(nummeshes, textures);
-        delete[] textures;
+        glDeleteTextures(textures.size(), textures.data());
+        textures.clear();
     }
     if(notexture) glDeleteTextures(1, &notexture);
     if(ebo) glDeleteBuffers_(1, &ebo);
@@ -120,21 +127,20 @@ void cleanupiqm()
 
 bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
 {
-    if(meshdata) return false;
-
     lilswap((uint32_t *)&buf[hdr.ofs_vertexarrays], hdr.num_vertexarrays*sizeof(iqmvertexarray)/sizeof(uint32_t));
     lilswap((uint32_t *)&buf[hdr.ofs_triangles], hdr.num_triangles*sizeof(iqmtriangle)/sizeof(uint32_t));
     lilswap((uint32_t *)&buf[hdr.ofs_meshes], hdr.num_meshes*sizeof(iqmmesh)/sizeof(uint32_t));
     lilswap((uint32_t *)&buf[hdr.ofs_joints], hdr.num_joints*sizeof(iqmjoint)/sizeof(uint32_t));
 
-    meshdata = buf;
+    /*
     nummeshes = hdr.num_meshes;
     numtris = hdr.num_triangles;
     numverts = hdr.num_vertexes;
     numjoints = hdr.num_joints;
+    */
     outframe.resize(hdr.num_joints);
-    textures = new GLuint[nummeshes];
-    memset(textures, 0, nummeshes*sizeof(GLuint));
+    textures.resize(hdr.num_meshes);
+    fill(begin(textures), end(textures), 0);
 
     Vec3* inposition = nullptr;
     Vec3* innormal = nullptr;
@@ -166,8 +172,15 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
         case IQM_BLENDWEIGHTS: if(va.format != IQM_UBYTE || va.size != 4) return false; inblendweight = (uint8_t *)&buf[va.offset]; break;
         }
     }
-    meshes = (iqmmesh *)&buf[hdr.ofs_meshes];
-    joints = (iqmjoint *)&buf[hdr.ofs_joints];
+
+    auto meshes_ptr = (iqmmesh *)&buf[hdr.ofs_meshes];
+    meshes.clear();
+    meshes.reserve(hdr.num_meshes);
+    meshes.insert( begin(meshes), meshes_ptr, meshes_ptr + hdr.num_meshes);
+    auto joints_ptr = (iqmjoint *)&buf[hdr.ofs_joints];
+    joints.clear();
+    joints.reserve(hdr.num_joints);
+    joints.insert( begin(joints), joints_ptr, joints_ptr + hdr.num_joints);
 
     baseframe.resize(hdr.num_joints);
     inversebaseframe.resize(hdr.num_joints);
@@ -202,8 +215,11 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
     glBufferData_(GL_ELEMENT_ARRAY_BUFFER, hdr.num_triangles*sizeof(iqmtriangle), tris, GL_STATIC_DRAW);
     glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-    vertex *verts = new vertex[hdr.num_vertexes];
-    memset(verts, 0, hdr.num_vertexes*sizeof(vertex));
+
+    std::vector<vertex> verts;
+    verts.resize(hdr.num_vertexes);
+    memset(verts.data(), 0, hdr.num_vertexes*sizeof(vertex));
+
     for(int i = 0; i < (int)hdr.num_vertexes; i++)
     {
         vertex &v = verts[i];
@@ -217,37 +233,32 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
 
     if(!vbo) glGenBuffers_(1, &vbo);
     glBindBuffer_(GL_ARRAY_BUFFER, vbo);
-    glBufferData_(GL_ARRAY_BUFFER, hdr.num_vertexes*sizeof(vertex), verts, GL_STATIC_DRAW);
+    glBufferData_(GL_ARRAY_BUFFER, hdr.num_vertexes*sizeof(vertex), verts.data(), GL_STATIC_DRAW);
     glBindBuffer_(GL_ARRAY_BUFFER, 0);
-    delete[] verts;
 
     return true;
 }
 
 bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
 {
-    if((int)hdr.num_poses != numjoints) return false;
-
-    if(animdata)
-    {
-        if(animdata != meshdata) delete[] animdata;
-        animdata = nullptr;
-        anims = nullptr;
-        numframes = 0;
-        numanims = 0;
-    }        
+    if(hdr.num_poses != hdr.num_joints) return false;
 
     lilswap((uint32_t *)&buf[hdr.ofs_poses], hdr.num_poses*sizeof(iqmpose)/sizeof(uint32_t));
     lilswap((uint32_t *)&buf[hdr.ofs_anims], hdr.num_anims*sizeof(iqmanim)/sizeof(uint32_t));
     lilswap((uint16_t *)&buf[hdr.ofs_frames], hdr.num_frames*hdr.num_framechannels);
 
-    animdata = buf;
-    numanims = hdr.num_anims;
-    numframes = hdr.num_frames;
+    //numanims = hdr.num_anims;
+    //numframes = hdr.num_frames;
 
+    auto anims_ptr = (iqmanim *)&buf[hdr.ofs_anims];
+    anims.clear();
+    anims.reserve(hdr.num_anims);
+    anims.insert(begin(anims), anims_ptr, anims_ptr + hdr.num_anims);
+    auto poses_ptr = (iqmpose *)&buf[hdr.ofs_poses];
+    poses.clear();
+    poses.reserve(hdr.num_poses);
+    poses.insert(begin(poses), poses_ptr, poses_ptr + hdr.num_poses);
     const char *str = hdr.ofs_text ? (char *)&buf[hdr.ofs_text] : "";
-    anims = (iqmanim *)&buf[hdr.ofs_anims];
-    poses = (iqmpose *)&buf[hdr.ofs_poses];
     frames.resize(hdr.num_frames * hdr.num_poses);
     uint16_t *framedata = (uint16_t *)&buf[hdr.ofs_frames];
 
@@ -286,7 +297,7 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
             }
         }
     }
- 
+
     for(int i = 0; i < (int)hdr.num_anims; i++)
     {
         iqmanim &a = anims[i];
@@ -301,7 +312,7 @@ bool loadiqm(const char *filename)
     FILE *f = fopen(filename, "rb");
     if(!f) return false;
 
-    uint8_t *buf = nullptr;
+    std::vector<uint8_t> buf;
     iqmheader hdr;
     if(fread(&hdr, 1, sizeof(hdr), f) != sizeof(hdr) || memcmp(hdr.magic, IQM_MAGIC, sizeof(hdr.magic)))
         goto error;
@@ -310,19 +321,20 @@ bool loadiqm(const char *filename)
         goto error;
     if(hdr.filesize > (16<<20)) 
         goto error; // sanity check... don't load files bigger than 16 MB
-    buf = new uint8_t[hdr.filesize];
-    if(fread(buf + sizeof(hdr), 1, hdr.filesize - sizeof(hdr), f) != hdr.filesize - sizeof(hdr))
+
+    buf.resize(hdr.filesize);
+
+    if(fread(buf.data() + sizeof(hdr), 1, hdr.filesize - sizeof(hdr), f) != hdr.filesize - sizeof(hdr))
         goto error;
 
-    if(hdr.num_meshes > 0 && !loadiqmmeshes(filename, hdr, buf)) goto error;
-    if(hdr.num_anims > 0 && !loadiqmanims(filename, hdr, buf)) goto error;
+    if(hdr.num_meshes > 0 && !loadiqmmeshes(filename, hdr, buf.data())) goto error;
+    if(hdr.num_anims > 0 && !loadiqmanims(filename, hdr, buf.data())) goto error;
  
     fclose(f);
     return true;
 
 error:
     printf("%s: error while loading\n", filename);
-    if(buf != meshdata && buf != animdata) delete[] buf;
     fclose(f);
     return false;
 }
@@ -331,23 +343,46 @@ error:
 // for expository purposes, even though this demo does not use all of them for rendering.
 void animateiqm(float curframe)
 {
-    if(numframes <= 0) return;
+    if(frames.empty()) return;
 
     int frame1 = (int)floor(curframe),
         frame2 = frame1 + 1;
     float frameoffset = curframe - frame1;
-    frame1 %= numframes;
-    frame2 %= numframes;
-    Matrix4x4 *mat1 = &frames[frame1 * numjoints],
-              *mat2 = &frames[frame2 * numjoints];
+    frame1 %= frames.size() / joints.size();
+    frame2 %= frames.size() / joints.size();
+    Matrix4x4 *mat1 = &frames[frame1 * joints.size()],
+              *mat2 = &frames[frame2 * joints.size()];
     // Interpolate matrixes between the two closest frames and concatenate with parent matrix if necessary.
     // Concatenate the result with the inverse of the base pose.
     // You would normally do animation blending and inter-frame blending here in a 3D engine.
-    for(int i = 0; i < numjoints; i++)
+    for(int i = 0; i < int(joints.size()); i++)
     {
-        Matrix4x4 mat = mat1[i]*(1 - frameoffset) + mat2[i]*frameoffset;
-        if(joints[i].parent >= 0) outframe[i] = outframe[joints[i].parent] * mat;
-        else outframe[i] = mat;
+        Matrix4x4 mat = mix(mat1[i], mat2[i], frameoffset);
+        outframe[i] = joints[i].parent ? outframe[joints[i].parent] * mat : mat;
+
+#if 0
+        if( any(isnan(outframe[i][0])) || any(isnan(outframe[i][1])) || any(isnan(outframe[i][2])) ||  any(isnan(outframe[i][3]))) {
+          printf("frames.size(): %zu\n", frames.size());
+          printf("frame1: %d, frame2: %d\n", frame1, frame2);
+          printf("outframe[%d] contains nan\n", i);
+          printf("outframe[%d]:\n", i);
+          print(outframe[i]);
+          printf("joints[%d]:\n", i);
+          printf("translate: %f %f %f\n", joints[i].translate[0], joints[i].translate[1], joints[i].translate[2]);
+          printf("rotate: %f %f %f %f\n", joints[i].rotate[0], joints[i].rotate[1], joints[i].rotate[2], joints[i].rotate[3]);
+          printf("scale: %f %f %f\n", joints[i].scale[0], joints[i].scale[1], joints[i].scale[2]);
+          printf("joints[%d].parent: %d\n", i, joints[i].parent);
+          printf("outframe[joints[%d].parent]:\n", i);
+          print(outframe[joints[i].parent]);
+          printf("mat:\n");
+          print(mat);
+          printf("mat1[%d]:\n", i);
+          print(mat1[i]);
+          printf("mat2[%d]:\n", i);
+          print(mat2[i]);
+          exit(EXIT_FAILURE);
+        }
+#endif
     }
 }
 
@@ -555,7 +590,7 @@ void renderiqm()
 
     glColor3f(1, 1, 1);
 
-    if(numframes > 0)
+    if(not frames.empty())
     {
         gpuskin.set();
     
@@ -563,14 +598,14 @@ void renderiqm()
         {
             glBindBuffer_(GL_UNIFORM_BUFFER, ubo);
             glBufferData_(GL_UNIFORM_BUFFER, ubosize, nullptr, GL_STREAM_DRAW);
-            glBufferSubData_(GL_UNIFORM_BUFFER, bonematsoffset, numjoints*sizeof(Matrix4x4), (float*)(outframe.data()));
+            glBufferSubData_(GL_UNIFORM_BUFFER, bonematsoffset, joints.size()*sizeof(Matrix4x4), (float*)(outframe.data()));
             glBindBuffer_(GL_UNIFORM_BUFFER, 0);
 
             glBindBufferBase_(GL_UNIFORM_BUFFER, 0, ubo);
         }
         else 
         {
-            glUniformMatrix4fv_(gpuskin.getparam("bonemats"), numjoints, GL_FALSE, (float*)(outframe.data()));
+            glUniformMatrix4fv_(gpuskin.getparam("bonemats"), joints.size(), GL_FALSE, (float*)(outframe.data()));
         }
     }
     else 
@@ -591,7 +626,7 @@ void renderiqm()
     glEnableClientState(GL_NORMAL_ARRAY);
     glEnableClientState(GL_TEXTURE_COORD_ARRAY);
     glEnableVertexAttribArray_(1);
-    if(numframes > 0)
+    if(not frames.empty())
     {
         glVertexAttribPointer_(6, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(vertex), &vert->blendweight);
         glVertexAttribPointer_(7, 4, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(vertex), &vert->blendindex);
@@ -600,7 +635,7 @@ void renderiqm()
     }
    
     iqmtriangle *tris = nullptr;
-    for(int i = 0; i < nummeshes; i++)
+    for(int i = 0; i < int(meshes.size()); i++)
     {
         iqmmesh &m = meshes[i];
         glBindTexture(GL_TEXTURE_2D, textures[i] ? textures[i] : notexture);
@@ -611,7 +646,7 @@ void renderiqm()
     glDisableClientState(GL_NORMAL_ARRAY);
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);
     glDisableVertexAttribArray_(1);
-    if(numframes > 0)
+    if(not frames.empty())
     {
         glDisableVertexAttribArray_(6);
         glDisableVertexAttribArray_(7);
@@ -697,6 +732,19 @@ void timerfunc(int val)
 
 void displayfunc()
 {
+#if 0
+    printf("meshes           %zu\n", meshes.size());
+    printf("textures         %zu\n", textures.size());
+    printf("joints           %zu\n", joints.size());
+    printf("poses            %zu\n", poses.size());
+    printf("anims            %zu\n", anims.size());
+    printf("baseframe        %zu\n", baseframe.size());
+    printf("inversebaseframe %zu\n", inversebaseframe.size());
+    printf("outframe         %zu\n", outframe.size());
+    printf("frames           %zu\n", frames.size());
+    printf("-----------------------\n");
+#endif
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     setupcamera();
@@ -740,7 +788,7 @@ int main(int argc, char **argv)
         }
         else if(!loadiqm(argv[i])) return EXIT_FAILURE;
     }
-    if(!meshdata && !loadiqm("mrfixit.iqm")) return EXIT_FAILURE;
+    if(not loadiqm("mrfixit.iqm")) return EXIT_FAILURE;
 
     initgl();
    
