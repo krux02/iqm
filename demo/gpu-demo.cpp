@@ -12,7 +12,6 @@
 #include "geom.hpp"
 #include "iqm.h"
 
-#include <glm/glm.hpp>
 #include <algorithm>
 #include <vector>
 #include <memory>
@@ -132,12 +131,6 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
     lilswap((uint32_t *)&buf[hdr.ofs_meshes], hdr.num_meshes*sizeof(iqmmesh)/sizeof(uint32_t));
     lilswap((uint32_t *)&buf[hdr.ofs_joints], hdr.num_joints*sizeof(iqmjoint)/sizeof(uint32_t));
 
-    /*
-    nummeshes = hdr.num_meshes;
-    numtris = hdr.num_triangles;
-    numverts = hdr.num_vertexes;
-    numjoints = hdr.num_joints;
-    */
     outframe.resize(hdr.num_joints);
     textures.resize(hdr.num_meshes);
     fill(begin(textures), end(textures), 0);
@@ -145,9 +138,9 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
     Vec3* inposition = nullptr;
     Vec3* innormal = nullptr;
     Vec4* intangent = nullptr;
-
-    float *intexcoord = nullptr;
-    uint8_t *inblendindex = nullptr, *inblendweight = nullptr;
+    float* intexcoord = nullptr;
+    uint8_t* inblendindex = nullptr;
+    uint8_t* inblendweight = nullptr;
     const char *str = hdr.ofs_text ? (char *)&buf[hdr.ofs_text] : "";
     iqmvertexarray *vas = (iqmvertexarray *)&buf[hdr.ofs_vertexarrays];
     for(int i = 0; i < (int)hdr.num_vertexarrays; i++)
@@ -155,29 +148,39 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
         iqmvertexarray &va = vas[i];
         switch(va.type)
         {
-        case IQM_POSITION: 
-          if(va.format != IQM_FLOAT || va.size != 3) return false; 
+        case IQM_POSITION:
+          if(va.format != IQM_FLOAT || va.size != 3) return false;
           inposition = (Vec3*)&buf[va.offset]; 
           break;
-        case IQM_NORMAL: 
+        case IQM_NORMAL:
           if(va.format != IQM_FLOAT || va.size != 3) return false;
           innormal = (Vec3*)&buf[va.offset];
           break;
-        case IQM_TANGENT: 
-          if(va.format != IQM_FLOAT || va.size != 4) return false; 
-          intangent = (Vec4*)&buf[va.offset]; 
+        case IQM_TANGENT:
+          if(va.format != IQM_FLOAT || va.size != 4) return false;
+          intangent = (Vec4*)&buf[va.offset];
           break;
-        case IQM_TEXCOORD: if(va.format != IQM_FLOAT || va.size != 2) return false; intexcoord = (float *)&buf[va.offset]; lilswap(intexcoord, 2*hdr.num_vertexes); break;
-        case IQM_BLENDINDEXES: if(va.format != IQM_UBYTE || va.size != 4) return false; inblendindex = (uint8_t *)&buf[va.offset]; break;
-        case IQM_BLENDWEIGHTS: if(va.format != IQM_UBYTE || va.size != 4) return false; inblendweight = (uint8_t *)&buf[va.offset]; break;
+        case IQM_TEXCOORD:
+          if(va.format != IQM_FLOAT || va.size != 2) return false;
+          intexcoord = (float*)&buf[va.offset];
+          lilswap(intexcoord, 2*hdr.num_vertexes);
+          break;
+        case IQM_BLENDINDEXES:
+          if(va.format != IQM_UBYTE || va.size != 4) return false;
+          inblendindex = (uint8_t*)&buf[va.offset];
+          break;
+        case IQM_BLENDWEIGHTS:
+          if(va.format != IQM_UBYTE || va.size != 4) return false;
+          inblendweight = (uint8_t*)&buf[va.offset];
+          break;
         }
     }
 
-    auto meshes_ptr = (iqmmesh *)&buf[hdr.ofs_meshes];
+    auto meshes_ptr = (iqmmesh*)&buf[hdr.ofs_meshes];
     meshes.clear();
     meshes.reserve(hdr.num_meshes);
     meshes.insert( begin(meshes), meshes_ptr, meshes_ptr + hdr.num_meshes);
-    auto joints_ptr = (iqmjoint *)&buf[hdr.ofs_joints];
+    auto joints_ptr = (iqmjoint*)&buf[hdr.ofs_joints];
     joints.clear();
     joints.reserve(hdr.num_joints);
     joints.insert( begin(joints), joints_ptr, joints_ptr + hdr.num_joints);
@@ -187,8 +190,8 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
     for(int i = 0; i < (int)hdr.num_joints; i++)
     {
         iqmjoint &j = joints[i];
-        auto translate = Vec3(j.translate[0], j.translate[1], j.translate[2]);
-        auto scale = Vec3(j.scale[0], j.scale[1], j.scale[2]);
+        auto translate = *(Vec3*)(j.translate);
+        auto scale = *(Vec3*)(j.scale);
         auto rotate = normalize(*(Quat*)(j.rotate));
         auto scalerot_mat = Matrix3x3(rotate) * diagonal3x3(scale);
         baseframe[i] = Matrix4x4( Vec4(scalerot_mat[0],0), Vec4(scalerot_mat[1],0), Vec4(scalerot_mat[2],0), Vec4(translate,1));
@@ -220,8 +223,7 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
     verts.resize(hdr.num_vertexes);
     memset(verts.data(), 0, hdr.num_vertexes*sizeof(vertex));
 
-    for(int i = 0; i < (int)hdr.num_vertexes; i++)
-    {
+    FOR(int, i, 0, hdr.num_vertexes){
         vertex &v = verts[i];
         if(inposition) v.position = inposition[i];
         if(innormal) v.normal = innormal[i];
@@ -359,30 +361,6 @@ void animateiqm(float curframe)
     {
         Matrix4x4 mat = mix(mat1[i], mat2[i], frameoffset);
         outframe[i] = joints[i].parent ? outframe[joints[i].parent] * mat : mat;
-
-#if 0
-        if( any(isnan(outframe[i][0])) || any(isnan(outframe[i][1])) || any(isnan(outframe[i][2])) ||  any(isnan(outframe[i][3]))) {
-          printf("frames.size(): %zu\n", frames.size());
-          printf("frame1: %d, frame2: %d\n", frame1, frame2);
-          printf("outframe[%d] contains nan\n", i);
-          printf("outframe[%d]:\n", i);
-          print(outframe[i]);
-          printf("joints[%d]:\n", i);
-          printf("translate: %f %f %f\n", joints[i].translate[0], joints[i].translate[1], joints[i].translate[2]);
-          printf("rotate: %f %f %f %f\n", joints[i].rotate[0], joints[i].rotate[1], joints[i].rotate[2], joints[i].rotate[3]);
-          printf("scale: %f %f %f\n", joints[i].scale[0], joints[i].scale[1], joints[i].scale[2]);
-          printf("joints[%d].parent: %d\n", i, joints[i].parent);
-          printf("outframe[joints[%d].parent]:\n", i);
-          print(outframe[joints[i].parent]);
-          printf("mat:\n");
-          print(mat);
-          printf("mat1[%d]:\n", i);
-          print(mat1[i]);
-          printf("mat2[%d]:\n", i);
-          print(mat2[i]);
-          exit(EXIT_FAILURE);
-        }
-#endif
     }
 }
 
@@ -573,7 +551,7 @@ void renderiqm()
                          one[4] = { 1, 1, 1, 1 },
                          ambientcol[4] = { 0.5f, 0.5f, 0.5f, 1 }, 
                          diffusecol[4] = { 0.5f, 0.5f, 0.5f, 1 },
-                         lightdir[4] = { cosf(radians(-60)), 0, sinf(radians(-60)), 0 };
+                         lightdir[4] = { cosf(radians(-60.0f)), 0, sinf(radians(-60.0f)), 0 };
 
     glPushMatrix();
     glRotatef(rotate, 0, 0, -1);
@@ -704,7 +682,7 @@ void setupcamera()
     glLoadIdentity();
 
     GLdouble aspect = double(scrw)/scrh,
-             fov = radians(90),
+             fov = radians(90.0f),
              fovy = 2*atan2(tan(fov/2), aspect),
              nearplane = 1e-2f, farplane = 1000,
              ydist = nearplane * tan(fovy/2), xdist = ydist * aspect;
@@ -732,19 +710,6 @@ void timerfunc(int val)
 
 void displayfunc()
 {
-#if 0
-    printf("meshes           %zu\n", meshes.size());
-    printf("textures         %zu\n", textures.size());
-    printf("joints           %zu\n", joints.size());
-    printf("poses            %zu\n", poses.size());
-    printf("anims            %zu\n", anims.size());
-    printf("baseframe        %zu\n", baseframe.size());
-    printf("inversebaseframe %zu\n", inversebaseframe.size());
-    printf("outframe         %zu\n", outframe.size());
-    printf("frames           %zu\n", frames.size());
-    printf("-----------------------\n");
-#endif
-
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     setupcamera();

@@ -4,7 +4,7 @@
 #include <algorithm>
 
 
-#if 1
+#if 0
 
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
@@ -225,6 +225,7 @@ struct Matrix4x4
 {
     Vec4 a, b, c, d;
 
+    Matrix4x4() {}
     Matrix4x4(const Vec4 &a, const Vec4 &b, const Vec4 &c, const Vec4 &d) : a(a), b(b), c(c), d(d) {}
 
     Vec4& operator[](long i) { return (&a)[i]; }
@@ -389,6 +390,14 @@ Matrix4x4 &operator*=(Matrix4x4& mat, const Matrix4x4 &o) {
   return (mat = mat * o);
 }
 
+Matrix4x4 operator*(const Matrix4x4& mat, float f) {
+  return { mat.a * f, mat.b * f, mat.c * f, mat.d * f };
+}
+
+Matrix4x4 operator+(const Matrix4x4& mat1, const Matrix4x4& mat2) {
+  return { mat1.a + mat2.a, mat1.b + mat2.b, mat1.c + mat2.c, mat1.d + mat2.d };
+}
+
 #endif
 
 void print(const Matrix3x3& m) {
@@ -459,14 +468,145 @@ Matrix3x3 invertRotation(Matrix3x3 mat) {
     return transpose(mat);
 }
 
-Matrix4x3 invert(const Matrix4x3& mat) {
+/*
+Matrix4x3 inverse(const Matrix4x3& mat) {
     Matrix3x3 invrot = invertRotation(Matrix3x3(mat));
     Vec3 trans = -(invrot * mat[3]);
     return Matrix4x3(invrot[0], invrot[1], invrot[2], trans);
 }
 
-Matrix3x4 invert(const Matrix3x4 &o) {
-    return transpose(invert(transpose(o)));
+Matrix3x4 inverse(const Matrix3x4 &o) {
+    return transpose(inverse(transpose(o)));
+}
+*/
+
+Matrix4x4 mix(Matrix4x4 m1, Matrix4x4 m2, float alpha) {
+  return m1 * (1-alpha) + m2 * alpha;
+}
+
+Matrix4x4 inverse(const Matrix4x4& mat) {
+
+  Matrix4x4 result;
+  float* m = (float*)&mat;
+  float* res = (float*)&result;
+
+    res[0] = m[5]  * m[10] * m[15] - 
+             m[5]  * m[11] * m[14] - 
+             m[9]  * m[6]  * m[15] + 
+             m[9]  * m[7]  * m[14] +
+             m[13] * m[6]  * m[11] - 
+             m[13] * m[7]  * m[10];
+
+    res[4] = -m[4]  * m[10] * m[15] + 
+              m[4]  * m[11] * m[14] + 
+              m[8]  * m[6]  * m[15] - 
+              m[8]  * m[7]  * m[14] - 
+              m[12] * m[6]  * m[11] + 
+              m[12] * m[7]  * m[10];
+
+    res[8] = m[4]  * m[9] * m[15] - 
+             m[4]  * m[11] * m[13] - 
+             m[8]  * m[5] * m[15] + 
+             m[8]  * m[7] * m[13] + 
+             m[12] * m[5] * m[11] - 
+             m[12] * m[7] * m[9];
+
+    res[12] = -m[4]  * m[9] * m[14] + 
+               m[4]  * m[10] * m[13] +
+               m[8]  * m[5] * m[14] - 
+               m[8]  * m[6] * m[13] - 
+               m[12] * m[5] * m[10] + 
+               m[12] * m[6] * m[9];
+
+    res[1] = -m[1]  * m[10] * m[15] + 
+              m[1]  * m[11] * m[14] + 
+              m[9]  * m[2] * m[15] - 
+              m[9]  * m[3] * m[14] - 
+              m[13] * m[2] * m[11] + 
+              m[13] * m[3] * m[10];
+
+    res[5] = m[0]  * m[10] * m[15] - 
+             m[0]  * m[11] * m[14] - 
+             m[8]  * m[2] * m[15] + 
+             m[8]  * m[3] * m[14] + 
+             m[12] * m[2] * m[11] - 
+             m[12] * m[3] * m[10];
+
+    res[9] = -m[0]  * m[9] * m[15] + 
+              m[0]  * m[11] * m[13] + 
+              m[8]  * m[1] * m[15] - 
+              m[8]  * m[3] * m[13] - 
+              m[12] * m[1] * m[11] + 
+              m[12] * m[3] * m[9];
+
+    res[13] = m[0]  * m[9] * m[14] - 
+              m[0]  * m[10] * m[13] - 
+              m[8]  * m[1] * m[14] + 
+              m[8]  * m[2] * m[13] + 
+              m[12] * m[1] * m[10] - 
+              m[12] * m[2] * m[9];
+
+    res[2] = m[1]  * m[6] * m[15] - 
+             m[1]  * m[7] * m[14] - 
+             m[5]  * m[2] * m[15] + 
+             m[5]  * m[3] * m[14] + 
+             m[13] * m[2] * m[7] - 
+             m[13] * m[3] * m[6];
+
+    res[6] = -m[0]  * m[6] * m[15] + 
+              m[0]  * m[7] * m[14] + 
+              m[4]  * m[2] * m[15] - 
+              m[4]  * m[3] * m[14] - 
+              m[12] * m[2] * m[7] + 
+              m[12] * m[3] * m[6];
+
+    res[10] = m[0]  * m[5] * m[15] - 
+              m[0]  * m[7] * m[13] - 
+              m[4]  * m[1] * m[15] + 
+              m[4]  * m[3] * m[13] + 
+              m[12] * m[1] * m[7] - 
+              m[12] * m[3] * m[5];
+
+    res[14] = -m[0]  * m[5] * m[14] + 
+               m[0]  * m[6] * m[13] + 
+               m[4]  * m[1] * m[14] - 
+               m[4]  * m[2] * m[13] - 
+               m[12] * m[1] * m[6] + 
+               m[12] * m[2] * m[5];
+
+    res[3] = -m[1] * m[6] * m[11] + 
+              m[1] * m[7] * m[10] + 
+              m[5] * m[2] * m[11] - 
+              m[5] * m[3] * m[10] - 
+              m[9] * m[2] * m[7] + 
+              m[9] * m[3] * m[6];
+
+    res[7] = m[0] * m[6] * m[11] - 
+             m[0] * m[7] * m[10] - 
+             m[4] * m[2] * m[11] + 
+             m[4] * m[3] * m[10] + 
+             m[8] * m[2] * m[7] - 
+             m[8] * m[3] * m[6];
+
+    res[11] = -m[0] * m[5] * m[11] + 
+               m[0] * m[7] * m[9] + 
+               m[4] * m[1] * m[11] - 
+               m[4] * m[3] * m[9] - 
+               m[8] * m[1] * m[7] + 
+               m[8] * m[3] * m[5];
+
+    res[15] = m[0] * m[5] * m[10] - 
+              m[0] * m[6] * m[9] - 
+              m[4] * m[1] * m[10] + 
+              m[4] * m[2] * m[9] + 
+              m[8] * m[1] * m[6] - 
+              m[8] * m[2] * m[5];
+
+    float det = m[0] * res[0] + m[1] * res[4] + m[2] * res[8] + m[3] * res[12];
+
+    det = 1.0 / det;
+
+    return result * det;
 }
 
 
@@ -596,7 +736,7 @@ inline void test() {
 
   printf("transform1:\n");
   print(transform(arg1, arg2));
-  printf("transform2:\n");
+  printf("transform2:\n"); 
   print(transform(arg1_, arg2_));
 
   exit(0);

@@ -307,7 +307,7 @@ void renderiqm() {
                          one[4] = { 1, 1, 1, 1 },
                          ambientcol[4] = { 0.5f, 0.5f, 0.5f, 1 }, 
                          diffusecol[4] = { 0.5f, 0.5f, 0.5f, 1 },
-                         lightdir[4] = { cosf(radians(-60)), 0, sinf(radians(-60)), 0 };
+                         lightdir[4] = { cosf(radians(-60.0f)), 0, sinf(radians(-60.0f)), 0 };
 
     glPushMatrix();
     glTranslatef(translate.x*scale, translate.y*scale, translate.z*scale);
@@ -391,7 +391,7 @@ void setupcamera() {
     glLoadIdentity();
 
     GLdouble aspect = double(scrw)/scrh,
-             fov = radians(90),
+             fov = radians(90.0f),
              fovy = 2*atan2(tan(fov/2), aspect),
              nearplane = 1e-2f, farplane = 1000,
              ydist = nearplane * tan(fovy/2), xdist = ydist * aspect;
