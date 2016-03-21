@@ -103,9 +103,9 @@ struct vertex
     Vec3 position;
     Vec3 normal;
     Vec4 tangent;
-    GLfloat texcoord[2];
-    GLubyte blendindex[4];
-    GLubyte blendweight[4];
+    Vec2 texcoord;
+    Vec4u8 blendindex;
+    Vec4u8 blendweight;
 };
 
 GLuint ebo = 0, vbo = 0, ubo = 0;
@@ -138,9 +138,9 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
     Vec3* inposition = nullptr;
     Vec3* innormal = nullptr;
     Vec4* intangent = nullptr;
-    float* intexcoord = nullptr;
-    uint8_t* inblendindex = nullptr;
-    uint8_t* inblendweight = nullptr;
+    Vec2* intexcoord = nullptr;
+    Vec4u8* inblendindex = nullptr;
+    Vec4u8* inblendweight = nullptr;
     const char *str = hdr.ofs_text ? (char *)&buf[hdr.ofs_text] : "";
     iqmvertexarray *vas = (iqmvertexarray *)&buf[hdr.ofs_vertexarrays];
     for(int i = 0; i < (int)hdr.num_vertexarrays; i++)
@@ -162,16 +162,15 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
           break;
         case IQM_TEXCOORD:
           if(va.format != IQM_FLOAT || va.size != 2) return false;
-          intexcoord = (float*)&buf[va.offset];
-          lilswap(intexcoord, 2*hdr.num_vertexes);
+          intexcoord = (Vec2*)&buf[va.offset];
           break;
         case IQM_BLENDINDEXES:
           if(va.format != IQM_UBYTE || va.size != 4) return false;
-          inblendindex = (uint8_t*)&buf[va.offset];
+          inblendindex = (Vec4u8*)&buf[va.offset];
           break;
         case IQM_BLENDWEIGHTS:
           if(va.format != IQM_UBYTE || va.size != 4) return false;
-          inblendweight = (uint8_t*)&buf[va.offset];
+          inblendweight = (Vec4u8*)&buf[va.offset];
           break;
         }
     }
@@ -228,9 +227,9 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
         if(inposition) v.position = inposition[i];
         if(innormal) v.normal = innormal[i];
         if(intangent) v.tangent = intangent[i];
-        if(intexcoord) memcpy(v.texcoord, &intexcoord[i*2], sizeof(v.texcoord));
-        if(inblendindex) memcpy(v.blendindex, &inblendindex[i*4], sizeof(v.blendindex));
-        if(inblendweight) memcpy(v.blendweight, &inblendweight[i*4], sizeof(v.blendweight));
+        if(intexcoord) v.texcoord = intexcoord[i];
+        if(inblendindex) v.blendindex = inblendindex[i];
+        if(inblendweight) v.blendweight = inblendweight[i];
     }
 
     if(!vbo) glGenBuffers_(1, &vbo);

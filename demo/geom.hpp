@@ -4,15 +4,17 @@
 #include <algorithm>
 
 
-#if 0
+#if 1
 
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/matrix_operation.hpp>
 
+using Vec2 = glm::fvec2;
 using Vec3 = glm::fvec3;
 using Vec4 = glm::fvec4;
+using Vec4u8 = glm::u8vec4;
 using Quat = glm::fquat;
 
 using glm::clamp;
@@ -24,13 +26,27 @@ using Matrix4x4 = glm::fmat4x4;
 
 #else
 
-struct Vec4;
+struct Vec4u8 {
+  uint8_t x, y, z, w;
+
+  Vec4u8() : x(0), y(0), z(0), w(0) {}
+  Vec4u8(uint8_t x, uint8_t y, uint8_t z, uint8_t w) : x(x), y(y), z(z), w(w) {}
+};
+
+struct Vec2
+{
+  float x,y;
+  Vec2() : x(0), y(0) {}
+  Vec2(float x, float y) : x(x), y(y) {}
+
+  float &operator[](long i) { return (&x)[i]; }
+};
 
 struct Vec3
 {
     float x, y, z;
 
-    Vec3() {}
+    Vec3() : x(0), y(0), z(0) {}
     Vec3(float x, float y, float z) : x(x), y(y), z(z) {}
 
     float &operator[](long i) { return (&x)[i]; }
