@@ -92,11 +92,7 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf) {
 
     for(int32_t i = 0; i < (int32_t)hdr.num_joints; i++) {
         iqmjoint &j = joints[i];
-        auto translate = Vec3(j.translate[0], j.translate[1], j.translate[2]);
-        auto scale = Vec3(j.scale[0], j.scale[1], j.scale[2]);
-        auto rotate_mat = Matrix3x3(normalize(*(Quat*)(j.rotate)));
-        auto scalerot_mat = rotate_mat * diagonal3x3(scale);
-        baseframe[i] = Matrix4x4(Vec4(scalerot_mat[0],0), Vec4(scalerot_mat[1],0), Vec4(scalerot_mat[2],0), Vec4(translate,1));
+        baseframe[i] = poseMatrix(*(JointPose*)(j.translate));
         inversebaseframe[i] = inverse(baseframe[i]);
         if(j.parent >= 0)  {
             baseframe[i]        = baseframe[j.parent] * baseframe[i];
@@ -146,26 +142,23 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf) {
     for(int32_t i = 0; i < (int32_t)hdr.num_frames; i++) {
         for(int32_t j = 0; j < (int32_t)hdr.num_poses; j++) {
             iqmpose &p = poses[j];
-            Quat rotate;
-            Vec3 translate, scale;
-            translate.x = p.channeloffset[0]; if(p.mask&0x01) translate.x += *framedata++ * p.channelscale[0];
-            translate.y = p.channeloffset[1]; if(p.mask&0x02) translate.y += *framedata++ * p.channelscale[1];
-            translate.z = p.channeloffset[2]; if(p.mask&0x04) translate.z += *framedata++ * p.channelscale[2];
-            rotate[0] = p.channeloffset[3]; if(p.mask&0x08) rotate[0] += *framedata++ * p.channelscale[3];
-            rotate[1] = p.channeloffset[4]; if(p.mask&0x10) rotate[1] += *framedata++ * p.channelscale[4];
-            rotate[2] = p.channeloffset[5]; if(p.mask&0x20) rotate[2] += *framedata++ * p.channelscale[5];
-            rotate[3] = p.channeloffset[6]; if(p.mask&0x40) rotate[3] += *framedata++ * p.channelscale[6];
-            scale.x = p.channeloffset[7]; if(p.mask&0x80) scale.x += *framedata++ * p.channelscale[7];
-            scale.y = p.channeloffset[8]; if(p.mask&0x100) scale.y += *framedata++ * p.channelscale[8];
-            scale.z = p.channeloffset[9]; if(p.mask&0x200) scale.z += *framedata++ * p.channelscale[9];
+            JointPose pose;
+            for(int k = 0; k < 10; ++k) {
+              // this basically uncompresses framedata from a sparse uint16_t representation, to float value
+              float raw = p.mask & (1 << k) ? float(*framedata++) : 0.0f;
+              float offset = p.channeloffset[k];
+              float scale = p.channelscale[k];
+              pose[k] = raw * scale + offset;
+            }
+
             // Concatenate each pose with the inverse base pose to avoid doing this at animation time.
             // If the joint has a parent, then it needs to be pre-concatenated with its parent's base pose.
             // Thus it all negates at animation time like so: 
             //   (parentPose * parentInverseBasePose) * (parentBasePose * childPose * childInverseBasePose) =>
             //   parentPose * (parentInverseBasePose * parentBasePose) * childPose * childInverseBasePose =>
             //   parentPose * childPose * childInverseBasePose
-            auto scalerot_mat = Matrix3x3(normalize(rotate)) * diagonal3x3(scale);
-            Matrix4x4 m(Vec4(scalerot_mat[0],0), Vec4(scalerot_mat[1],0), Vec4(scalerot_mat[2],0), Vec4(translate,1));
+
+            auto m = poseMatrix(pose);
             if(p.parent >= 0) frames[i*hdr.num_poses + j] = baseframe[p.parent] * m * inversebaseframe[j];
             else frames[i*hdr.num_poses + j] = m * inversebaseframe[j];
         }
@@ -427,7 +420,7 @@ void displayfunc() {
     glutSwapBuffers();
 }
 
-void keyboardfunc(uint8_t c, int32_t x, int32_t y) {
+void keyboardfunc(uint8_t c, int32_t /*x*/, int32_t /*y*/) {
     switch(c) {
     case 27:
         exit(EXIT_SUCCESS);

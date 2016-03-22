@@ -16,7 +16,7 @@
 #include <vector>
 #include <memory>
 
-#define FOR(TYPE, IDENT, BEGIN, END) for(TYPE IDENT = (TYPE)(BEGIN), IDENT##_end = (TYPE)(END); IDENT != IDENT##_end; ++IDENT)
+#define FOR(TYPE, IDENT, BEGIN, END) for(TYPE IDENT = (TYPE)(BEGIN), IDENT##_end = static_cast<decltype(IDENT)>(END); IDENT != IDENT##_end; ++IDENT)
 
 #define EXTS(EXT) \
     EXT(PFNGLUSEPROGRAMPROC, glUseProgram, true) \
@@ -111,6 +111,7 @@ struct vertex
 GLuint ebo = 0, vbo = 0, ubo = 0;
 GLint ubosize = 0, bonematsoffset = 0;
 
+
 void cleanupiqm()
 {
     if(not textures.empty())
@@ -126,14 +127,22 @@ void cleanupiqm()
 
 bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
 {
-    lilswap((uint32_t *)&buf[hdr.ofs_vertexarrays], hdr.num_vertexarrays*sizeof(iqmvertexarray)/sizeof(uint32_t));
-    lilswap((uint32_t *)&buf[hdr.ofs_triangles], hdr.num_triangles*sizeof(iqmtriangle)/sizeof(uint32_t));
-    lilswap((uint32_t *)&buf[hdr.ofs_meshes], hdr.num_meshes*sizeof(iqmmesh)/sizeof(uint32_t));
-    lilswap((uint32_t *)&buf[hdr.ofs_joints], hdr.num_joints*sizeof(iqmjoint)/sizeof(uint32_t));
+    lilswap((uint32_t*)&buf[hdr.ofs_vertexarrays], hdr.num_vertexarrays*sizeof(iqmvertexarray)/sizeof(uint32_t));
+    lilswap((uint32_t*)&buf[hdr.ofs_triangles], hdr.num_triangles*sizeof(iqmtriangle)/sizeof(uint32_t));
+    lilswap((uint32_t*)&buf[hdr.ofs_meshes], hdr.num_meshes*sizeof(iqmmesh)/sizeof(uint32_t));
+    lilswap((uint32_t*)&buf[hdr.ofs_joints], hdr.num_joints*sizeof(iqmjoint)/sizeof(uint32_t));
+
+
+#define ASSERT(VAL, EXPECT) if(VAL != EXPECT) { fprintf(stderr, #VAL "!=" #EXPECT "(%d != %d)\n", VAL, EXPECT); exit(EXIT_FAILURE); }
+
+    ASSERT(hdr.num_joints, hdr.num_poses);
 
     outframe.resize(hdr.num_joints);
     textures.resize(hdr.num_meshes);
     fill(begin(textures), end(textures), 0);
+
+    const char *str = hdr.ofs_text ? (char*)&buf[hdr.ofs_text] : "";
+    iqmvertexarray *vas = (iqmvertexarray*)&buf[hdr.ofs_vertexarrays];
 
     Vec3* inposition = nullptr;
     Vec3* innormal = nullptr;
@@ -141,59 +150,53 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
     Vec2* intexcoord = nullptr;
     Vec4u8* inblendindex = nullptr;
     Vec4u8* inblendweight = nullptr;
-    const char *str = hdr.ofs_text ? (char *)&buf[hdr.ofs_text] : "";
-    iqmvertexarray *vas = (iqmvertexarray *)&buf[hdr.ofs_vertexarrays];
-    for(int i = 0; i < (int)hdr.num_vertexarrays; i++)
-    {
+
+
+    FOR(int, i, 0, hdr.num_vertexarrays) {
         iqmvertexarray &va = vas[i];
+
+#define ASSERT2(FORMAT, SIZE) ASSERT(va.format, FORMAT); ASSERT(va.size, SIZE);
         switch(va.type)
         {
         case IQM_POSITION:
-          if(va.format != IQM_FLOAT || va.size != 3) return false;
+          ASSERT2(IQM_FLOAT, 3);
           inposition = (Vec3*)&buf[va.offset]; 
           break;
         case IQM_NORMAL:
-          if(va.format != IQM_FLOAT || va.size != 3) return false;
+          ASSERT2(IQM_FLOAT, 3);
           innormal = (Vec3*)&buf[va.offset];
           break;
         case IQM_TANGENT:
-          if(va.format != IQM_FLOAT || va.size != 4) return false;
+          ASSERT2(IQM_FLOAT, 4);
           intangent = (Vec4*)&buf[va.offset];
           break;
         case IQM_TEXCOORD:
-          if(va.format != IQM_FLOAT || va.size != 2) return false;
+          ASSERT2(IQM_FLOAT, 2);
           intexcoord = (Vec2*)&buf[va.offset];
           break;
         case IQM_BLENDINDEXES:
-          if(va.format != IQM_UBYTE || va.size != 4) return false;
+          ASSERT2(IQM_UBYTE, 4);
           inblendindex = (Vec4u8*)&buf[va.offset];
           break;
         case IQM_BLENDWEIGHTS:
-          if(va.format != IQM_UBYTE || va.size != 4) return false;
+          ASSERT2(IQM_UBYTE, 4);
           inblendweight = (Vec4u8*)&buf[va.offset];
           break;
         }
     }
+#undef ASSERT2
+#undef ASSERT
 
     auto meshes_ptr = (iqmmesh*)&buf[hdr.ofs_meshes];
-    meshes.clear();
-    meshes.reserve(hdr.num_meshes);
-    meshes.insert( begin(meshes), meshes_ptr, meshes_ptr + hdr.num_meshes);
+    meshes.assign(meshes_ptr, meshes_ptr + hdr.num_meshes);
     auto joints_ptr = (iqmjoint*)&buf[hdr.ofs_joints];
-    joints.clear();
-    joints.reserve(hdr.num_joints);
-    joints.insert( begin(joints), joints_ptr, joints_ptr + hdr.num_joints);
+    joints.assign(joints_ptr, joints_ptr + hdr.num_joints);
 
     baseframe.resize(hdr.num_joints);
     inversebaseframe.resize(hdr.num_joints);
-    for(int i = 0; i < (int)hdr.num_joints; i++)
-    {
+    FOR(int, i, 0, hdr.num_joints) {
         iqmjoint &j = joints[i];
-        auto translate = *(Vec3*)(j.translate);
-        auto scale = *(Vec3*)(j.scale);
-        auto rotate = normalize(*(Quat*)(j.rotate));
-        auto scalerot_mat = Matrix3x3(rotate) * diagonal3x3(scale);
-        baseframe[i] = Matrix4x4( Vec4(scalerot_mat[0],0), Vec4(scalerot_mat[1],0), Vec4(scalerot_mat[2],0), Vec4(translate,1));
+        baseframe[i] = poseMatrix(*(JointPose*)(j.translate));
         inversebaseframe[i] = inverse(baseframe[i]);
         if(j.parent >= 0)
         {
@@ -222,7 +225,7 @@ bool loadiqmmeshes(const char *filename, const iqmheader &hdr, uint8_t *buf)
     verts.resize(hdr.num_vertexes);
     memset(verts.data(), 0, hdr.num_vertexes*sizeof(vertex));
 
-    FOR(int, i, 0, hdr.num_vertexes){
+    FOR(int, i, 0, hdr.num_vertexes) {
         vertex &v = verts[i];
         if(inposition) v.position = inposition[i];
         if(innormal) v.normal = innormal[i];
@@ -244,43 +247,33 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
 {
     if(hdr.num_poses != hdr.num_joints) return false;
 
-    lilswap((uint32_t *)&buf[hdr.ofs_poses], hdr.num_poses*sizeof(iqmpose)/sizeof(uint32_t));
-    lilswap((uint32_t *)&buf[hdr.ofs_anims], hdr.num_anims*sizeof(iqmanim)/sizeof(uint32_t));
-    lilswap((uint16_t *)&buf[hdr.ofs_frames], hdr.num_frames*hdr.num_framechannels);
+    lilswap((uint32_t*)&buf[hdr.ofs_poses], hdr.num_poses*sizeof(iqmpose)/sizeof(uint32_t));
+    lilswap((uint32_t*)&buf[hdr.ofs_anims], hdr.num_anims*sizeof(iqmanim)/sizeof(uint32_t));
+    lilswap((uint16_t*)&buf[hdr.ofs_frames], hdr.num_frames*hdr.num_framechannels);
 
     //numanims = hdr.num_anims;
     //numframes = hdr.num_frames;
 
     auto anims_ptr = (iqmanim *)&buf[hdr.ofs_anims];
-    anims.clear();
-    anims.reserve(hdr.num_anims);
-    anims.insert(begin(anims), anims_ptr, anims_ptr + hdr.num_anims);
-    auto poses_ptr = (iqmpose *)&buf[hdr.ofs_poses];
-    poses.clear();
-    poses.reserve(hdr.num_poses);
-    poses.insert(begin(poses), poses_ptr, poses_ptr + hdr.num_poses);
+    anims.assign(anims_ptr, anims_ptr + hdr.num_anims);
+    auto poses_ptr = (iqmpose*)&buf[hdr.ofs_poses];
+    poses.assign(poses_ptr, poses_ptr + hdr.num_poses);
     const char *str = hdr.ofs_text ? (char *)&buf[hdr.ofs_text] : "";
     frames.resize(hdr.num_frames * hdr.num_poses);
     uint16_t *framedata = (uint16_t *)&buf[hdr.ofs_frames];
 
-    for(int i = 0; i < (int)hdr.num_frames; i++)
-    {
-        for(int j = 0; j < (int)hdr.num_poses; j++)
-        {
+    FOR(int, i, 0, hdr.num_frames) {
+        FOR(int, j, 0, hdr.num_poses) {
             iqmpose &p = poses[j];
-            Quat rotate;
-            auto translate = Vec3(0,0,0);
-            auto scale = Vec3(0,0,0);
-            translate.x = p.channeloffset[0]; if(p.mask&0x01) translate.x += *framedata++ * p.channelscale[0];
-            translate.y = p.channeloffset[1]; if(p.mask&0x02) translate.y += *framedata++ * p.channelscale[1];
-            translate.z = p.channeloffset[2]; if(p.mask&0x04) translate.z += *framedata++ * p.channelscale[2];
-            rotate.x = p.channeloffset[3]; if(p.mask&0x08) rotate.x += *framedata++ * p.channelscale[3];
-            rotate.y = p.channeloffset[4]; if(p.mask&0x10) rotate.y += *framedata++ * p.channelscale[4];
-            rotate.z = p.channeloffset[5]; if(p.mask&0x20) rotate.z += *framedata++ * p.channelscale[5];
-            rotate.w = p.channeloffset[6]; if(p.mask&0x40) rotate.w += *framedata++ * p.channelscale[6];
-            scale.x = p.channeloffset[7]; if(p.mask&0x80) scale.x += *framedata++ * p.channelscale[7];
-            scale.y = p.channeloffset[8]; if(p.mask&0x100) scale.y += *framedata++ * p.channelscale[8];
-            scale.z = p.channeloffset[9]; if(p.mask&0x200) scale.z += *framedata++ * p.channelscale[9];
+
+            JointPose pose;
+            FOR(int, k, 0, 10) {
+              // this basically uncompresses framedata from a sparse uint16_t representation, to float value
+              float raw = p.mask & (1 << k) ? float(*framedata++) : 0.0f;
+              float offset = p.channeloffset[k];
+              float scale = p.channelscale[k];
+              pose[k] = raw * scale + offset;
+            }
 
             // Concatenate each pose with the inverse base pose to avoid doing this at animation time.
             // If the joint has a parent, then it needs to be pre-concatenated with its parent's base pose.
@@ -289,8 +282,7 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
             //   parentPose * (parentInverseBasePose * parentBasePose) * childPose * childInverseBasePose =>
             //   parentPose * childPose * childInverseBasePose
 
-            auto scalerot_mat = Matrix3x3(normalize(rotate)) * diagonal3x3(scale);
-            Matrix4x4 m = Matrix4x4( Vec4(scalerot_mat[0], 0), Vec4(scalerot_mat[1], 0), Vec4(scalerot_mat[2], 0), Vec4(translate,1));
+            Matrix4x4 m = poseMatrix(pose);
             if(p.parent >= 0) {
               frames[i*hdr.num_poses + j] = baseframe[p.parent] * m * inversebaseframe[j];
             } else {
@@ -299,9 +291,7 @@ bool loadiqmanims(const char *filename, const iqmheader &hdr, uint8_t *buf)
         }
     }
 
-    for(int i = 0; i < (int)hdr.num_anims; i++)
-    {
-        iqmanim &a = anims[i];
+    for(iqmanim& a : anims) {
         printf("%s: loaded anim: %s\n", filename, &str[a.name]);
     }
     
@@ -356,7 +346,7 @@ void animateiqm(float curframe)
     // Interpolate matrixes between the two closest frames and concatenate with parent matrix if necessary.
     // Concatenate the result with the inverse of the base pose.
     // You would normally do animation blending and inter-frame blending here in a 3D engine.
-    for(int i = 0; i < int(joints.size()); i++)
+    FOR(int, i, 0, joints.size())
     {
         Matrix4x4 mat = mix(mat1[i], mat2[i], frameoffset);
         outframe[i] = joints[i].parent ? outframe[joints[i].parent] * mat : mat;
@@ -542,13 +532,13 @@ void main(void)
 
 noskinattribs, noskintexs);
 
-float scale = 1, rotate = 0;
+float scale = 2, rotate = 0;
 
 void renderiqm()
 {
-    static const GLfloat zero[4] = { 0, 0, 0, 0 }, 
+    static const GLfloat zero[4] = { 0, 0, 0, 0 },
                          one[4] = { 1, 1, 1, 1 },
-                         ambientcol[4] = { 0.5f, 0.5f, 0.5f, 1 }, 
+                         ambientcol[4] = { 0.5f, 0.5f, 0.5f, 1 },
                          diffusecol[4] = { 0.5f, 0.5f, 0.5f, 1 },
                          lightdir[4] = { cosf(radians(-60.0f)), 0, sinf(radians(-60.0f)), 0 };
 
@@ -714,12 +704,14 @@ void displayfunc()
     setupcamera();
 
     animateiqm(animate);
+
+    rotate = animate;
     renderiqm();
 
     glutSwapBuffers();
 }
 
-void keyboardfunc(uint8_t c, int x, int y)
+void keyboardfunc(uint8_t c, int, int)
 {
     switch(c)   
     {
